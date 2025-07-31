@@ -6,7 +6,7 @@
 
 using namespace std;
 
-constexpr double default_distance		= 10;
+constexpr double default_distance		= 5;
 constexpr double default_angle			= gk::pi/6.2;
 double len_count = 0.0;
 double new_angle = gk::pi/6.2;
@@ -30,7 +30,7 @@ string rule_lookup(const char c, const double *value) {
 			// define rules here
 			// return fmt::format("A({})+A({})--A({})+A({})",
 			// 		(x * p), (x * h), (x * h), (x * q));
-			return fmt::format("A[+A]A[-({0})A][A]", new_angle, new_dist, new_dist/5.0);
+			return fmt::format("A({0})[+A({0})]A({0})[-A({0})][A({0})]", x);
 			// return fmt::format("A[+A]A[-A]A");
 
 
@@ -61,10 +61,35 @@ string rule_lookup(const char c, const double *value) {
 				return fmt::format("{}", c);
 			}
 			break;
-		// case '+':
-		// 	break;
-		// case '-':
-		// 	break;
+		case '+':
+			if (value) {
+				x = *value;	
+			} else {
+				x = default_angle;
+			}
+
+			return fmt::format("{}({})", c, x+gk::pi/16 * sin(new_angle));
+
+			// no match
+			if (value) {
+				return fmt::format("{}({})", c, x);
+			} else {
+				return fmt::format("{}", c);
+			}
+			break;
+		case '-':
+			if (value) {
+				x = *value;	
+			} else {
+				x = default_angle;
+			}
+			// no match
+			if (value) {
+				return fmt::format("{}({})", c, x);
+			} else {
+				return fmt::format("{}", c);
+			}
+			break;
 
 		// no match
 		default: 
@@ -79,7 +104,7 @@ string rule_lookup(const char c, const double *value) {
 
 string generate_lstr(int iterations) {
 	string V = "A,B,a,b,+,[,],(,)";
-	string axiom = "A";
+	string axiom = fmt::format("A[+A]A[-A][A]");
 
 	string lstr_expanded;
 	string lstr = axiom;
