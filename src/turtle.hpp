@@ -13,6 +13,6 @@ struct Turtle {
 };
 
 namespace turtle {
-void move(Turtle &turtle, double length);
-void turn(Turtle &turtle, double angle);
+void move(Turtle &turtle, const double length);
+void turn(Turtle &turtle, const double angle);
 } // namespace turtle
