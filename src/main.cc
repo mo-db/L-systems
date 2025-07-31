@@ -169,7 +169,6 @@ void turtle_action(Turtle &turtle, vector<Turtle> &tstack, vector<Line2> &plant,
     turtle::move(turtle, x);
     p2 = {turtle.x, turtle.y};
     plant.push_back(Line2{p1, p2});
-		fmt::print("plant x: {}\n", plant[(int)plant.size()-1].p1.x);
     break;
 
 	// move without adding a branch to plant
@@ -244,7 +243,6 @@ void process_lstring(string lstr, Turtle &turtle, vector<Turtle> &tstack, vector
 						value_string += lstr[cnt++];
 					}
 					double value = atof(value_string.c_str());
-					fmt::print("{}\n", c);
 					turtle_action(turtle, tstack, plant,  c, &value);
 					cnt++;
 					// no () follows
@@ -268,10 +266,38 @@ int main() {
 	app::init(app, 1920/2, 1080/2);
 	Frame window;
 
+
+
+	// Setup Dear ImGui context
+	IMGUI_CHECKVERSION();
+	ImGui::CreateContext();
+	ImGuiIO& io = ImGui::GetIO(); (void)io;
+	io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
+	io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;      // Enable Gamepad Controls
+
+	// Setup Dear ImGui style
+	ImGui::StyleColorsDark();
+	//ImGui::StyleColorsLight();
+
+	// Setup scaling
+	ImGuiStyle& style = ImGui::GetStyle();
+	style.ScaleAllSizes(1.0);        // Bake a fixed style scale. (until we have a solution for dynamic style scaling, changing this requires resetting Style + calling this again)
+	// style.FontScaleDpi = main_scale;        // Set initial font scale. (using io.ConfigDpiScaleFonts=true makes this unnecessary. We leave both here for documentation purpose)
+
+	// Setup Platform/Renderer backends
+	ImGui_ImplSDL3_InitForSDLRenderer(app.video.window, app.video.renderer);
+	ImGui_ImplSDLRenderer3_Init(app.video.renderer);
+
+	ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
+	bool show_demo_window = true;
+	bool show_another_window = true;
+
+
+
 	while(app.context.keep_running) {
 		app::process_events(app);
 
-		assert(SDL_LockTexture(app.video.window_texture, NULL, 
+		assert(SDL_LockTexture(app.video.window_texture, NULL,
 					 reinterpret_cast<void **>(&window.buf), &window.pitch));
 		window.width = app.video.width;
 		window.height = app.video.height;
@@ -282,7 +308,6 @@ int main() {
 		vector<Turtle> tstack;
 
 		string result = generate_lstr(4);
-		cout << "result: " << result << endl;
 		process_lstring(result, turtle, tstack, plant);
 		for (auto &branch : plant) {
 			draw::line(window, branch, color::fg, 1.0);
@@ -295,11 +320,57 @@ int main() {
 			new_dist *= -1.0;
 		}
 
+		ImGui_ImplSDLRenderer3_NewFrame();
+		ImGui_ImplSDL3_NewFrame();
+		ImGui::NewFrame();
+
+    ImGui::ShowDemoWindow(&show_demo_window);
+		// 2. Show a simple window that we create ourselves. We use a Begin/End pair to create a named window.
+		{
+				static float f = 0.0f;
+				static int counter = 0;
+
+				ImGui::Begin("Hello, world!");                          // Create a window called "Hello, world!" and append into it.
+
+				ImGui::Text("This is some useful text.");               // Display some text (you can use a format strings too)
+				ImGui::Checkbox("Demo Window", &show_demo_window);      // Edit bools storing our window open/close state
+				ImGui::Checkbox("Another Window", &show_another_window);
+
+				ImGui::SliderFloat("float", &f, 0.0f, 1.0f);            // Edit 1 float using a slider from 0.0f to 1.0f
+				ImGui::ColorEdit3("clear color", (float*)&clear_color); // Edit 3 floats representing a color
+
+				if (ImGui::Button("Button"))                            // Buttons return true when clicked (most widgets return true when edited/activated)
+						counter++;
+				ImGui::SameLine();
+				ImGui::Text("counter = %d", counter);
+
+				ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / io.Framerate, io.Framerate);
+				ImGui::End();
+		}
+
+
 		SDL_UnlockTexture(app.video.window_texture);
 		window.clear();
 		SDL_RenderTexture(app.video.renderer, app.video.window_texture, NULL, NULL);
+
+    ImGui::Render();
+		SDL_SetRenderScale(app.video.renderer, io.DisplayFramebufferScale.x, io.DisplayFramebufferScale.y);
+		SDL_SetRenderDrawColorFloat(app.video.renderer, clear_color.x, clear_color.y, clear_color.z, clear_color.w);
+
+
+		// SDL_RenderClear(app.video.renderer);
+		ImGui_ImplSDLRenderer3_RenderDrawData(ImGui::GetDrawData(), app.video.renderer);
 		SDL_RenderPresent(app.video.renderer);
 
-		SDL_Delay(1);
 	}
+	// Cleanup
+	ImGui_ImplSDLRenderer3_Shutdown();
+	ImGui_ImplSDL3_Shutdown();
+	ImGui::DestroyContext();
+
+	SDL_DestroyRenderer(app.video.renderer);
+	SDL_DestroyWindow(app.video.window);
+	SDL_Quit();
+
+	return 0;
 }
