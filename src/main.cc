@@ -6,7 +6,7 @@
 
 using namespace std;
 
-constexpr double default_distance		= 5;
+constexpr double default_distance		= 20;
 constexpr double default_angle			= gk::pi/6.2;
 double len_count = 0.0;
 double new_angle = gk::pi/6.2;
@@ -262,37 +262,16 @@ void process_lstring(string lstr, Turtle &turtle, vector<Turtle> &tstack, vector
 
 // store lines in main? vector<line>
 int main() {
+	int win_w = 960;
+	int win_h = 540;
 	App app;
-	app::init(app, 1920/2, 1080/2);
+	app::init(app, win_w, win_h);
 	Frame window;
 
-
-
-	// Setup Dear ImGui context
-	IMGUI_CHECKVERSION();
-	ImGui::CreateContext();
-	ImGuiIO& io = ImGui::GetIO(); (void)io;
-	io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
-	io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;      // Enable Gamepad Controls
-
-	// Setup Dear ImGui style
-	ImGui::StyleColorsDark();
-	//ImGui::StyleColorsLight();
-
-	// Setup scaling
-	ImGuiStyle& style = ImGui::GetStyle();
-	style.ScaleAllSizes(1.0);        // Bake a fixed style scale. (until we have a solution for dynamic style scaling, changing this requires resetting Style + calling this again)
-	// style.FontScaleDpi = main_scale;        // Set initial font scale. (using io.ConfigDpiScaleFonts=true makes this unnecessary. We leave both here for documentation purpose)
-
-	// Setup Platform/Renderer backends
-	ImGui_ImplSDL3_InitForSDLRenderer(app.video.window, app.video.renderer);
-	ImGui_ImplSDLRenderer3_Init(app.video.renderer);
-
-	ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
-	bool show_demo_window = true;
-	bool show_another_window = true;
-
-
+	app.gui.clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
+	app.gui.show_window_a = true;
+	app.gui.show_window_b = true;
+	app.gui.show_window_c = true;
 
 	while(app.context.keep_running) {
 		app::process_events(app);
@@ -303,6 +282,7 @@ int main() {
 		window.height = app.video.height;
 		std::fill_n(window.buf, app.video.width * app.video.height, color::bg);
 
+		// now the actuall app
 		Turtle turtle{round(app.video.width)/2, round(app.video.height), gk::pi/2};
 		vector<Line2> plant;
 		vector<Turtle> tstack;
@@ -319,46 +299,24 @@ int main() {
 		if (new_dist < 0.0) {
 			new_dist *= -1.0;
 		}
+		draw::line(window, Line2{{100.0, 100.0}, {win_w - 100.0, win_h - 100.0}}, color::fg, 1.0);
+		draw::line(window, Line2{{100.0, 100.0}, {100.0, win_h  - 100.0}}, color::fg, 1.0);
 
-		ImGui_ImplSDLRenderer3_NewFrame();
-		ImGui_ImplSDL3_NewFrame();
-		ImGui::NewFrame();
+		// this was the app
 
-    ImGui::ShowDemoWindow(&show_demo_window);
-		// 2. Show a simple window that we create ourselves. We use a Begin/End pair to create a named window.
-		{
-				static float f = 0.0f;
-				static int counter = 0;
+		// gui now
+		app::update_gui(app);
 
-				ImGui::Begin("Hello, world!");                          // Create a window called "Hello, world!" and append into it.
-
-				ImGui::Text("This is some useful text.");               // Display some text (you can use a format strings too)
-				ImGui::Checkbox("Demo Window", &show_demo_window);      // Edit bools storing our window open/close state
-				ImGui::Checkbox("Another Window", &show_another_window);
-
-				ImGui::SliderFloat("float", &f, 0.0f, 1.0f);            // Edit 1 float using a slider from 0.0f to 1.0f
-				ImGui::ColorEdit3("clear color", (float*)&clear_color); // Edit 3 floats representing a color
-
-				if (ImGui::Button("Button"))                            // Buttons return true when clicked (most widgets return true when edited/activated)
-						counter++;
-				ImGui::SameLine();
-				ImGui::Text("counter = %d", counter);
-
-				ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / io.Framerate, io.Framerate);
-				ImGui::End();
-		}
-
-
+		// render now
 		SDL_UnlockTexture(app.video.window_texture);
 		window.clear();
 		SDL_RenderTexture(app.video.renderer, app.video.window_texture, NULL, NULL);
 
     ImGui::Render();
-		SDL_SetRenderScale(app.video.renderer, io.DisplayFramebufferScale.x, io.DisplayFramebufferScale.y);
-		SDL_SetRenderDrawColorFloat(app.video.renderer, clear_color.x, clear_color.y, clear_color.z, clear_color.w);
+		SDL_SetRenderScale(app.video.renderer, app.gui.io->DisplayFramebufferScale.x, app.gui.io->DisplayFramebufferScale.y);
+		// SDL_SetRenderDrawColorFloat(app.video.renderer, clear_color.x, clear_color.y, clear_color.z, clear_color.w);
 
-
-		// SDL_RenderClear(app.video.renderer);
+		SDL_RenderClear(app.video.renderer);
 		ImGui_ImplSDLRenderer3_RenderDrawData(ImGui::GetDrawData(), app.video.renderer);
 		SDL_RenderPresent(app.video.renderer);
 
