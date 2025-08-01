@@ -1,6 +1,7 @@
 // app.hpp
 #pragma once
 #include "core.hpp"
+#include "modules.hpp"
 #include "graphics.hpp"
 
 enum struct AppMode {
@@ -10,6 +11,7 @@ enum struct AppMode {
 
 struct App {
 
+	// Core Modules
 	struct Context {
 		AppMode mode = AppMode::NORMAL;
 		bool keep_running = true;
@@ -49,7 +51,7 @@ namespace app {
 void init(App &app, int width, int height);
 void process_events(App &app);
 void lock_frame_buf(App &app);
-void update_gui(App &app);
+void update_gui(App &app, Modules &modules);
 void render(App &app);
 void cleanup(App &app);
 } // namespace app

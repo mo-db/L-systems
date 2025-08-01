@@ -121,29 +121,27 @@ void process_events(App &app) {
 		}
 	}
 }
-void update_gui(App &app) {
+void update_gui(App &app, Modules &modules) {
   ImGui_ImplSDLRenderer3_NewFrame();
   ImGui_ImplSDL3_NewFrame();
   ImGui::NewFrame();
 
   // window_a
-  ImGui::ShowDemoWindow(&app.gui.show_window_a);
+  if (app.gui.show_window_a) {
+    ImGui::ShowDemoWindow(&app.gui.show_window_a);
+  }
 
   // window_b
-  {
-    static float f = 0.0f;
+  if (app.gui.show_window_b) {
     static int counter = 0;
 
     ImGui::Begin("Hello, world!");
     ImGui::Text("This is some useful text.");
-		ImGui::Checkbox(
-        "Demo Window",
-        &app.gui
-             .show_window_a);
+    ImGui::Checkbox("Demo Window", &app.gui.show_window_a);
     ImGui::Checkbox("Another Window", &app.gui.show_window_b);
 
-    ImGui::SliderFloat("float", &f, 0.0f,
-                       1.0f);
+    ImGui::SliderInt("iterations", &modules.lsystem.iterations, 0, 6);
+    ImGui::SliderFloat("float", &modules.lsystem.default_distance, 0.0, 100.0);
 
     if (ImGui::Button("Button"))
       counter++;
@@ -154,12 +152,89 @@ void update_gui(App &app) {
     ImGui::End();
   }
 
-  // window_c
+  // // window_c
+  // if (app.gui.show_window_c) {
+  //   ImGui::Begin("Another Window", &app.gui.show_window_c);
+  //   ImGui::Text("Hello from another window!");
+  //   if (ImGui::Button("Close Me"))
+  //     app.gui.show_window_c = false;
+  //   ImGui::End();
+  // }
+
+  static bool open = true;
+  bool *p_open = &open;
+  // *p_open = true;
+
+  // Demonstrate create a window with multiple child windows.
   if (app.gui.show_window_c) {
-    ImGui::Begin("Another Window", &app.gui.show_window_c);
-    ImGui::Text("Hello from another window!");
-    if (ImGui::Button("Close Me"))
-      app.gui.show_window_c = false;
+    ImGui::SetNextWindowSize(ImVec2(500, 440), ImGuiCond_FirstUseEver);
+    if (ImGui::Begin("Example: Simple layout", p_open,
+                     ImGuiWindowFlags_MenuBar)) {
+      if (ImGui::BeginMenuBar()) {
+        if (ImGui::BeginMenu("File")) {
+          if (ImGui::MenuItem("Close", "Ctrl+W")) {
+            *p_open = false;
+          }
+          ImGui::EndMenu();
+        }
+        ImGui::EndMenuBar();
+      }
+
+			enum class Selected {
+				NONE,
+				AXIOM,
+				RULE_A,
+			};
+
+      // Left
+      static Selected selected = Selected::NONE;
+      {
+        ImGui::BeginChild("left pane", ImVec2(150, 0),
+                          ImGuiChildFlags_Borders | ImGuiChildFlags_ResizeX);
+				if (ImGui::Selectable("axiom", selected == Selected::AXIOM)) {
+					selected = Selected::AXIOM;
+				}
+
+				if (ImGui::Selectable("rule_A", selected == Selected::RULE_A)) {
+					selected = Selected::RULE_A;
+				}
+				if (ImGui::Button("unselect")) {
+					selected = Selected::NONE;
+				}
+
+        ImGui::EndChild();
+      }
+      ImGui::SameLine();
+
+      // Right
+      // {
+      // 		ImGui::BeginGroup();
+      // 		ImGui::BeginChild("item view", ImVec2(0,
+      // -ImGui::GetFrameHeightWithSpacing())); // Leave room for 1 line below
+      // us 		ImGui::Text("MyObject: %d", selected); 		ImGui::Separator(); 		if
+      // (ImGui::BeginTabBar("##Tabs", ImGuiTabBarFlags_None))
+      // 		{
+      // 				if (ImGui::BeginTabItem("Description"))
+      // 				{
+      // 						ImGui::TextWrapped("Lorem
+      // ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod
+      // tempor incididunt ut labore et dolore magna aliqua. ");
+      // 						ImGui::EndTabItem();
+      // 				}
+      // 				if (ImGui::BeginTabItem("Details"))
+      // 				{
+      // 						ImGui::Text("ID:
+      // 0123456789"); 						ImGui::EndTabItem();
+      // 				}
+      // 				ImGui::EndTabBar();
+      // 		}
+      // 		ImGui::EndChild();
+      // 		if (ImGui::Button("Revert")) {}
+      // 		ImGui::SameLine();
+      // 		if (ImGui::Button("Save")) {}
+      // 		ImGui::EndGroup();
+      // }
+    }
     ImGui::End();
   }
 }

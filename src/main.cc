@@ -3,16 +3,16 @@
 #include "graphics.hpp"
 #include "rasterize.hpp"
 #include "turtle.hpp"
+#include "modules.hpp"
 
 using namespace std;
 
-constexpr double default_distance		= 20;
+constexpr double default_distance		= 50;
 constexpr double default_angle			= gk::pi/6.2;
-double len_count = 0.0;
-double new_angle = gk::pi/6.2;
-double new_dist = default_distance;
 
-string rule_lookup(const char c, const double *value) {
+
+
+string rule_lookup(Lsystem &lsystem, const char c, const double *value) {
 	double f = 1.0;
 	double p = 0.3;
 	double q = f - p;
@@ -24,13 +24,13 @@ string rule_lookup(const char c, const double *value) {
 			if (value) {
 				x = *value;	
 			} else {
-				x = default_distance;
+				x = lsystem.default_distance;
 			}
 
 			// define rules here
 			// return fmt::format("A({})+A({})--A({})+A({})",
 			// 		(x * p), (x * h), (x * h), (x * q));
-			return fmt::format("A({0})[+A({0})]A({0})[-A({0})][A({0})]", x);
+			return fmt::format("A");
 			// return fmt::format("A[+A]A[-A]A");
 
 
@@ -49,10 +49,6 @@ string rule_lookup(const char c, const double *value) {
 			}
 
 			// define rules here
-			return fmt::format("A+");
-			// if (x > 1.0) {
-			// 	return fmt::format("B-");
-			// }
 
 			// no match
 			if (value) {
@@ -67,8 +63,6 @@ string rule_lookup(const char c, const double *value) {
 			} else {
 				x = default_angle;
 			}
-
-			return fmt::format("{}({})", c, x+gk::pi/16 * sin(new_angle));
 
 			// no match
 			if (value) {
@@ -102,13 +96,13 @@ string rule_lookup(const char c, const double *value) {
 	}
 }
 
-string generate_lstr(int iterations) {
+string generate_lstr(Lsystem &lsystem) {
 	string V = "A,B,a,b,+,[,],(,)";
-	string axiom = fmt::format("A[+A]A[-A][A]");
+	string axiom = fmt::format("-A");
 
 	string lstr_expanded;
 	string lstr = axiom;
-	for (int i = 0; i < iterations; i++) {
+	for (int i = 0; i < lsystem.iterations; i++) {
 		lstr_expanded = "";
 		int cnt = 0;
 		while (cnt < (int)lstr.size()) {
@@ -129,16 +123,16 @@ string generate_lstr(int iterations) {
 							value_string += lstr[cnt++];
 						}
 						double value = atof(value_string.c_str());
-						lstr_expanded += rule_lookup(c, &value);
+						lstr_expanded += rule_lookup(lsystem, c, &value);
 						cnt++;
 						// no () follows
 					} else {
-						lstr_expanded += rule_lookup(c, nullptr);
+						lstr_expanded += rule_lookup(lsystem, c, nullptr);
 						cnt++;
 					}
 				// end of string follows
 				} else {
-					lstr_expanded += rule_lookup(c, nullptr);
+					lstr_expanded += rule_lookup(lsystem, c, nullptr);
 					cnt++;
 				}
 			}
@@ -150,7 +144,7 @@ string generate_lstr(int iterations) {
 }
 
 void turtle_action(Turtle &turtle, vector<Turtle> &tstack, vector<Line2> &plant,
-		const char c, const double *value) {
+		const char c, const double *value, Lsystem &lsystem) {
 
 	double x;
 
@@ -162,7 +156,7 @@ void turtle_action(Turtle &turtle, vector<Turtle> &tstack, vector<Line2> &plant,
 		if (value) {
 			x = *value * default_distance;	
 		} else {
-			x = default_distance;
+			x = lsystem.default_distance;
 		}
 
     p1 = {turtle.x, turtle.y};
@@ -176,7 +170,7 @@ void turtle_action(Turtle &turtle, vector<Turtle> &tstack, vector<Line2> &plant,
 		if (value) {
 			x = *value;	
 		} else {
-			x = default_distance;
+			x = lsystem.default_distance;
 		}
 
     turtle::move(turtle, x);
@@ -216,7 +210,7 @@ void turtle_action(Turtle &turtle, vector<Turtle> &tstack, vector<Line2> &plant,
   }
 }
 
-void process_lstring(string lstr, Turtle &turtle, vector<Turtle> &tstack, vector<Line2> &plant) {
+void process_lstring(string lstr, Turtle &turtle, vector<Turtle> &tstack, vector<Line2> &plant, Lsystem &lsystem) {
 	int cnt = 0;
 	while (cnt < (int)lstr.size()) {
 		char c = lstr[cnt];
@@ -229,7 +223,7 @@ void process_lstring(string lstr, Turtle &turtle, vector<Turtle> &tstack, vector
 		}
 		// if stack symbol -> copy and continue
 		if (c == '[' || c == ']') {
-			turtle_action(turtle, tstack, plant,  c, nullptr);
+			turtle_action(turtle, tstack, plant,  c, nullptr, lsystem);
 			cnt++;
 		// else process
 		} else {
@@ -243,16 +237,16 @@ void process_lstring(string lstr, Turtle &turtle, vector<Turtle> &tstack, vector
 						value_string += lstr[cnt++];
 					}
 					double value = atof(value_string.c_str());
-					turtle_action(turtle, tstack, plant,  c, &value);
+					turtle_action(turtle, tstack, plant,  c, &value, lsystem);
 					cnt++;
 					// no () follows
 				} else {
-					turtle_action(turtle, tstack, plant,  c, nullptr);
+					turtle_action(turtle, tstack, plant,  c, nullptr, lsystem);
 					cnt++;
 				}
 			// end of string follows
 			} else {
-				turtle_action(turtle, tstack, plant,  c, nullptr);
+				turtle_action(turtle, tstack, plant,  c, nullptr, lsystem);
 				cnt++;
 			}
 		}
@@ -266,38 +260,28 @@ int main() {
 	app::init(app, 960, 540);
 
 	app.gui.clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
-	app.gui.show_window_a = true;
-	app.gui.show_window_b = true;
+	app.gui.show_window_a = false;
+	app.gui.show_window_b = false;
 	app.gui.show_window_c = true;
+
+	Modules modules;
 
 	while(app.context.keep_running) {
 		app::process_events(app);
 		app::lock_frame_buf(app);
-
-
 
 		// now the actuall app
 		Turtle turtle{round(app.video.width)/2, round(app.video.height), gk::pi/2};
 		vector<Line2> plant;
 		vector<Turtle> tstack;
 
-		string result = generate_lstr(4);
-		process_lstring(result, turtle, tstack, plant);
+		string result = generate_lstr(modules.lsystem);
+		process_lstring(result, turtle, tstack, plant, modules.lsystem);
 		for (auto &branch : plant) {
 			draw::line(app, branch, color::fg, 1.0);
 		}
 
-		new_angle += 0.01;
-		len_count += 0.01;
-		new_dist = sin(len_count) * default_distance * 2.0;
-		if (new_dist < 0.0) {
-			new_dist *= -1.0;
-		}
-		draw::line(app, Line2{{100.0, 100.0}, {win_w - 100.0, win_h - 100.0}}, color::fg, 1.0);
-		draw::line(app, Line2{{100.0, 100.0}, {100.0, win_h  - 100.0}}, color::fg, 1.0);
-
-
-		app::update_gui(app);
+		app::update_gui(app, modules);
 		app::render(app);
 	}
 	app::cleanup(app);
