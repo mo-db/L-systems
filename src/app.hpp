@@ -2,7 +2,6 @@
 #pragma once
 #include "core.hpp"
 #include "graphics.hpp"
-#include "rasterize.hpp"
 
 enum struct AppMode {
   NORMAL,
@@ -20,6 +19,8 @@ struct App {
 		SDL_Window* window = nullptr;
 		SDL_Renderer* renderer = nullptr;
 		SDL_Texture* window_texture = nullptr;
+		uint32_t *frame_buf = nullptr;
+		int pitch = 0;
 		int width = 0;
 		int height = 0;
 		double window_scale;
@@ -47,6 +48,8 @@ struct App {
 namespace app {
 void init(App &app, int width, int height);
 void process_events(App &app);
+void lock_frame_buf(App &app);
 void update_gui(App &app);
-int resize(App &app, int width, int height);
+void render(App &app);
+void cleanup(App &app);
 } // namespace app

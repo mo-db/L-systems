@@ -164,4 +164,35 @@ void update_gui(App &app) {
   }
 }
 
+void lock_frame_buf(App &app) {
+  assert(SDL_LockTexture(app.video.window_texture, NULL,
+                         reinterpret_cast<void **>(&app.video.frame_buf),
+                         &app.video.pitch));
+  std::fill_n(app.video.frame_buf, app.video.width * app.video.height,
+              color::bg);
+}
+
+void render(App &app) {
+  SDL_UnlockTexture(app.video.window_texture);
+  SDL_RenderTexture(app.video.renderer, app.video.window_texture, NULL, NULL);
+  app.video.frame_buf = nullptr;
+  app.video.pitch = 0;
+
+  ImGui::Render();
+  SDL_SetRenderScale(app.video.renderer, app.gui.io->DisplayFramebufferScale.x,
+                     app.gui.io->DisplayFramebufferScale.y);
+  ImGui_ImplSDLRenderer3_RenderDrawData(ImGui::GetDrawData(),
+                                        app.video.renderer);
+  SDL_RenderPresent(app.video.renderer);
+}
+
+void cleanup(App &app) {
+  ImGui_ImplSDLRenderer3_Shutdown();
+  ImGui_ImplSDL3_Shutdown();
+  ImGui::DestroyContext();
+
+  SDL_DestroyRenderer(app.video.renderer);
+  SDL_DestroyWindow(app.video.window);
+  SDL_Quit();
+}
 } // namespace app

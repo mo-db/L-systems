@@ -262,11 +262,8 @@ void process_lstring(string lstr, Turtle &turtle, vector<Turtle> &tstack, vector
 
 // store lines in main? vector<line>
 int main() {
-	int win_w = 960;
-	int win_h = 540;
 	App app;
-	app::init(app, win_w, win_h);
-	Frame window;
+	app::init(app, 960, 540);
 
 	app.gui.clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 	app.gui.show_window_a = true;
@@ -275,12 +272,9 @@ int main() {
 
 	while(app.context.keep_running) {
 		app::process_events(app);
+		app::lock_frame_buf(app);
 
-		assert(SDL_LockTexture(app.video.window_texture, NULL,
-					 reinterpret_cast<void **>(&window.buf), &window.pitch));
-		window.width = app.video.width;
-		window.height = app.video.height;
-		std::fill_n(window.buf, app.video.width * app.video.height, color::bg);
+
 
 		// now the actuall app
 		Turtle turtle{round(app.video.width)/2, round(app.video.height), gk::pi/2};
@@ -290,7 +284,7 @@ int main() {
 		string result = generate_lstr(4);
 		process_lstring(result, turtle, tstack, plant);
 		for (auto &branch : plant) {
-			draw::line(window, branch, color::fg, 1.0);
+			draw::line(app, branch, color::fg, 1.0);
 		}
 
 		new_angle += 0.01;
@@ -299,36 +293,13 @@ int main() {
 		if (new_dist < 0.0) {
 			new_dist *= -1.0;
 		}
-		draw::line(window, Line2{{100.0, 100.0}, {win_w - 100.0, win_h - 100.0}}, color::fg, 1.0);
-		draw::line(window, Line2{{100.0, 100.0}, {100.0, win_h  - 100.0}}, color::fg, 1.0);
+		draw::line(app, Line2{{100.0, 100.0}, {win_w - 100.0, win_h - 100.0}}, color::fg, 1.0);
+		draw::line(app, Line2{{100.0, 100.0}, {100.0, win_h  - 100.0}}, color::fg, 1.0);
 
-		// this was the app
 
-		// gui now
 		app::update_gui(app);
-
-		// render now
-		SDL_UnlockTexture(app.video.window_texture);
-		window.clear();
-		SDL_RenderTexture(app.video.renderer, app.video.window_texture, NULL, NULL);
-
-    ImGui::Render();
-		SDL_SetRenderScale(app.video.renderer, app.gui.io->DisplayFramebufferScale.x, app.gui.io->DisplayFramebufferScale.y);
-		// SDL_SetRenderDrawColorFloat(app.video.renderer, clear_color.x, clear_color.y, clear_color.z, clear_color.w);
-
-		SDL_RenderClear(app.video.renderer);
-		ImGui_ImplSDLRenderer3_RenderDrawData(ImGui::GetDrawData(), app.video.renderer);
-		SDL_RenderPresent(app.video.renderer);
-
+		app::render(app);
 	}
-	// Cleanup
-	ImGui_ImplSDLRenderer3_Shutdown();
-	ImGui_ImplSDL3_Shutdown();
-	ImGui::DestroyContext();
-
-	SDL_DestroyRenderer(app.video.renderer);
-	SDL_DestroyWindow(app.video.window);
-	SDL_Quit();
-
+	app::cleanup(app);
 	return 0;
 }
