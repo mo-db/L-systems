@@ -36,4 +36,23 @@ void line(App &app, const Line2 &line, uint32_t color, double wd) {
     }
   }
 }
+
+
+void plot_circle(App &app, uint32_t *pixel_buf, const Circle2 &circle, uint32_t color) {
+	int xm = std::round(circle.c.x);
+	int ym = std::round(circle.c.y);
+	int r = std::round(circle.radius());
+  int x = -r, y = 0, err = 2 - 2 * r; /* bottom left to top right */
+  do {
+		set_pixel(app, xm - x, ym + y, color); //   I. Quadrant +x +y
+		set_pixel(app, xm - y, ym - x, color); //  II. Quadrant -x +y
+		set_pixel(app, xm + x, ym - y, color); // III. Quadrant -x -y
+		set_pixel(app, xm + y, ym + x, color); //  IV. Quadrant +x -y
+    r = err;
+    if (r <= y)
+      err += ++y * 2 + 1; /* e_xy+e_y < 0 */
+    if (r > x || err > y) /* e_xy+e_x > 0 or no 2nd y-step */
+      err += ++x * 2 + 1; /* -> x-step now */
+  } while (x < 0);
+}
 } // namespace draw

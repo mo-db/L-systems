@@ -6,4 +6,6 @@
 
 struct Modules {
 	Lsystem lsystem;
+	Turtle turtle;
+	std::vector<Turtle> turtle_stack;
 };
