@@ -158,15 +158,18 @@ int main() {
 		app::lock_frame_buf(app);
 
 		// now the actuall app
-		Turtle turtle{{round(app.video.width)/2, round(app.video.height)}, gk::pi/2};
 		Plant &axiom = modules.lsystem.axiom.plant;
+		std::string axiom_str = "A[+A]A[-A]A";
 
 		axiom = lsystem::generate_plant(modules.turtle, modules.turtle_stack,
 				modules.lsystem, Vec2{(double)app.video.width / 3.0, (double)app.video.height - 100.0},
-				"A[+A]A[-A]A");
+				axiom_str);
 
-		string result = generate_lstr(modules.lsystem);
-		process_lstring(result, turtle, tstack, plant, modules.lsystem);
+		// string result = generate_lstr(modules.lsystem);
+		// process_lstring(result, turtle, tstack, plant, modules.lsystem);
+
+
+		fmt::print("branches: {}\n", (int)axiom.branches.size());
 		for (auto &branch : axiom.branches) {
 			draw::line(app, {axiom.get_node(branch.n1_id).p,
 											 axiom.get_node(branch.n2_id).p}, color::fg, 0.0);

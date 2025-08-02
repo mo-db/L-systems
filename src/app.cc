@@ -141,7 +141,7 @@ void update_gui(App &app, Modules &modules) {
     ImGui::Checkbox("Another Window", &app.gui.show_window_b);
 
     ImGui::SliderInt("iterations", &modules.lsystem.iterations, 0, 6);
-    ImGui::SliderFloat("float", &modules.lsystem.default_distance, 0.0, 100.0);
+    ImGui::SliderFloat("float", &modules.lsystem.standard_length, 0.0, 100.0);
 
     if (ImGui::Button("Button"))
       counter++;

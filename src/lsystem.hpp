@@ -2,18 +2,10 @@
 #pragma once
 #include "core.hpp"
 #include "graphics.hpp"
-// #include "turtle.hpp"
-
-#define MAX_NODES 4096
 
 struct Node {
 	Vec2 p{};
 	int id = -1;
-};
-
-enum struct BranchType {
-  A,
-  B,
 };
 
 struct Branch {
@@ -66,7 +58,7 @@ struct Plant {
 struct Turtle {
 	Vec2 p{};
 	int current_node = -1;
-  double angle = 0.0;
+	double angle = gk::pi / 2.0;
   Turtle() = default;
   Turtle(int current_node, const double angle)
       : current_node{current_node}, angle{angle} {}
@@ -88,7 +80,7 @@ struct Lsystem {
 	std::string rule_A = "";
 	int iterations = 0;
 	float standard_length = 50.0;
-	float standard_angle = gk::pi/2;
+	float standard_angle = gk::pi / 6.0;
 
 };
 

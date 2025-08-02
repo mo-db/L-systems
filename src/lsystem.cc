@@ -27,6 +27,7 @@ void _turtle_action(Turtle &turtle, std::vector<Turtle> &turtle_stack,
 			x = lsystem.standard_length;
 		}
     turtle::move(turtle, x);
+		fmt::print("turtle.x: {}, turtle.y: {}\n", turtle.p.x, turtle.p.y);
 		plant.add_node(turtle.p);
     plant.branches.push_back(Branch{turtle.current_node, plant.nodes.back().id, c, visable, 1.0});
 		turtle.current_node = plant.nodes.back().id;
@@ -66,6 +67,7 @@ Plant generate_plant(Turtle &turtle, std::vector<Turtle> &turtle_stack, Lsystem 
 	Plant plant{}; 
 	plant.add_node(start);
 	turtle.current_node = plant.nodes.back().id;
+	turtle.p = start;
 
 	int counter = 0;
 	while (counter < (int)lstring.size()) {
@@ -74,9 +76,7 @@ Plant generate_plant(Turtle &turtle, std::vector<Turtle> &turtle_stack, Lsystem 
 		if (c == '[' || c == ']') {
 			_turtle_action(turtle, turtle_stack, plant, lsystem, c, nullptr);
 			counter++;
-		}
-
-		if (std::isalpha(c)) {
+		} else {
 			// check if not last char
 			if (counter + 1 < (int)lstring.size()) {
 				// () follows -> process whole string
@@ -100,8 +100,7 @@ Plant generate_plant(Turtle &turtle, std::vector<Turtle> &turtle_stack, Lsystem 
 				counter++;
 			}
 		}
-
-		}
+	}
 
 	return plant;
 }
