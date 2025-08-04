@@ -10,31 +10,33 @@ int main() {
 	app::init(app, 960, 540);
 
 	app.gui.clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
-	app.gui.show_window_a = true;
-	app.gui.show_window_b = true;
+	app.gui.show_window_a = false;
+	app.gui.show_window_b = false;
 	app.gui.show_window_c = true;
 
 	Modules modules;
+	Lsystem &lsystem = modules.lsystem;
 
+	std::string complete_lstring = "";
+	Plant complete_plant{};
+
+	int accum = 0;
 	while(app.context.keep_running) {
 		app::process_events(app);
 		app::lock_frame_buf(app);
 
-		// now the actuall app
-		Lsystem &lsystem = modules.lsystem;
-
+		// calculate axiom and rule lstrings
 		Plant axiom_plant = lsystem::generate_plant(modules.lsystem, Vec2{(double)app.video.width * 0.3, (double)app.video.height - 100.0},
-				lsystem.axiom);
+				lsystem.axiom.text);
 
-		std::string complete_lstring = lsystem::generate_lstring(modules.lsystem);
-		Plant complete_plant = lsystem::generate_plant(modules.lsystem, Vec2{(double)app.video.width * 0.7, (double)app.video.height - 100.0},
-				complete_lstring);
+		// calculate the lstring, every 30 frames
+		if (accum == 0) {
+			complete_lstring = lsystem::generate_lstring(modules.lsystem);
+			complete_plant = lsystem::generate_plant(modules.lsystem, Vec2{(double)app.video.width * 0.7, (double)app.video.height - 100.0},
+					complete_lstring);
+		}
 
-		// string result = generate_lstr(modules.lsystem);
-		// process_lstring(result, turtle, tstack, plant, modules.lsystem);
-
-
-		// fmt::print("branches: {}\n", (int)axiom.branches.size());
+		// draw the plants
 		for (auto &branch : axiom_plant.branches) {
 			draw::line(app, {*(branch.n1), *(branch.n2)}, color::fg, 0.0);
 		}
@@ -44,6 +46,8 @@ int main() {
 
 		app::update_gui(app, modules);
 		app::render(app);
+		accum++;
+		accum %= 60;
 	}
 	app::cleanup(app);
 	return 0;

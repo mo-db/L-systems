@@ -1,18 +1,15 @@
 #include "lsystem.hpp"
 
-namespace turtle {
-Vec2 calculate_move(Turtle &turtle, const double length) {
+namespace lsystem {
+Vec2 _calculate_move(Turtle &turtle, const double length) {
 	Vec2 position = *turtle.node;
 	position.x += length * cos(turtle.angle);
 	position.y += length * -sin(turtle.angle);
  	// fmt::print("pos.x: {}, pos.y: {}\n", position.x, position.y);
 	return position;
 }
-void turn(Turtle &turtle, const double angle) { turtle.angle += angle; }
-} // namespace turtle
+void _turn(Turtle &turtle, const double angle) { turtle.angle += angle; }
 
-
-namespace lsystem {
 void _turtle_action(Plant &plant, Lsystem &lsystem, const char c,
                    const double *value) {
 	double x;
@@ -32,7 +29,7 @@ void _turtle_action(Plant &plant, Lsystem &lsystem, const char c,
 		}
 
 		Vec2 *last_node = turtle.node;
-		Vec2 *new_node = plant.add_node(turtle::calculate_move(turtle, x));
+		Vec2 *new_node = plant.add_node(_calculate_move(turtle, x));
 		turtle.node = new_node;
     plant.branches.push_back(Branch{last_node, new_node, c, visable, 1.0});
 	}
@@ -44,7 +41,7 @@ void _turtle_action(Plant &plant, Lsystem &lsystem, const char c,
 		} else {
 			x = lsystem.standard_angle;
 		}
-    turtle::turn(turtle, -x);
+    _turn(turtle, -x);
 	}
 
 	// turn turtle clockwise
@@ -54,7 +51,7 @@ void _turtle_action(Plant &plant, Lsystem &lsystem, const char c,
 		} else {
 			x = lsystem.standard_angle;
 		}
-    turtle::turn(turtle, x);
+    _turn(turtle, x);
 	}
 
 	// push and pop turtle state
@@ -145,31 +142,33 @@ double _eval_expr(std::string &expr_string, Lsystem &lsystem, const double in_x,
 }
 
 
-std::string _maybe_apply_rule(Lsystem &lsystem, const char sym, const double *x_in) {
+std::string _maybe_apply_rule(Lsystem &lsystem, const char symbol, const double *x_in) {
+	// if no value specified in braces, set fitting default
 	double x{}, y{}, z{};
 	if (x_in) {
 		x = *x_in;	
 	} else {
-		if (sym == '+' || sym  == '-') {
+		if (symbol == '+' || symbol  == '-') {
 			x = lsystem.standard_angle;
 		} else {
 			x = lsystem.standard_length;
 		}
 	}
 
-	// check all rules
+	// iterate rules
 	for (auto &rule : lsystem.rules) {
-		const char *letter_string = lsystem.alphabet[rule.letter_index];
-		char symbol = letter_string[0];
+		char rule_symbol = (lsystem.alphabet[rule.symbol_index])[0];
 		std::string condition = rule.condition;
-		// if there is a rule for the symbol, check if condition is true
-		if (symbol == sym) {
+		std::string text = rule.text;
+
+		// if there is a rule with fitting symbol, check if condition is true
+		if (rule_symbol == symbol) {
 			double result = _eval_expr(condition, lsystem, x, 0.0, 0.0);
 			if (util::equal_epsilon(result, 1.0)) {
-				// std::vector<char> no_replace_symbols;
-				std::string text = rule.text;
 				std::string return_str = "";
 				int cnt = 0;
+
+				// substitute the symbol for the rule, with evaluated expressions
 				while (cnt < (int)text.size()) {
 					char c = text[cnt];
 					if (c == '(') {
@@ -189,57 +188,60 @@ std::string _maybe_apply_rule(Lsystem &lsystem, const char sym, const double *x_
 					}
 				}
 				return return_str;
+
 			}
 		}
 	}
+
+	// return the following if no rule could match
 	if (x) {
-		return fmt::format("{}({})", sym, x);
+		return fmt::format("{}({})", symbol, x);
 	} else {
-		return fmt::format("{}", sym);
+		return fmt::format("{}", symbol);
 	}
 }
 
 std::string generate_lstring(Lsystem &lsystem) {
-	std::string lstr_expanded;
-	std::string lstr = lsystem.axiom;
+	std::string lstring_expanded;
+	std::string lstring = lsystem.axiom.text;
 	for (int i = 0; i < lsystem.iterations; i++) {
-		lstr_expanded = "";
+		lstring_expanded = "";
 		int cnt = 0;
-		while (cnt < (int)lstr.size()) {
-			char c = lstr[cnt];
+		while (cnt < (int)lstring.size()) {
+			char c = lstring[cnt];
 			// if stack symbol -> copy and continue
 			if (c == '[' || c == ']') {
-				lstr_expanded += c;
+				lstring_expanded += c;
 				cnt++;
 			// else process
 			} else {
 				// check if not last char
-				if (cnt + 1 < (int)lstr.size()) {
+				if (cnt + 1 < (int)lstring.size()) {
 					// () follows -> process whole string
-					if (lstr[cnt+1] == '(') {
+					if (lstring[cnt+1] == '(') {
 						cnt += 2; // skip bracket
 						std::string value_string = "";
-						while (lstr[cnt] != ')') {
-							value_string += lstr[cnt++];
+						while (lstring[cnt] != ')') {
+							value_string += lstring[cnt++];
 						}
 						double value = atof(value_string.c_str());
-						lstr_expanded += _maybe_apply_rule(lsystem, c, &value);
+						lstring_expanded += _maybe_apply_rule(lsystem, c, &value);
 						cnt++;
 						// no () follows
 					} else {
-						lstr_expanded += _maybe_apply_rule(lsystem, c, nullptr);
+						lstring_expanded += _maybe_apply_rule(lsystem, c, nullptr);
 						cnt++;
 					}
 				// end of string follows
 				} else {
-					lstr_expanded += _maybe_apply_rule(lsystem, c, nullptr);
+					lstring_expanded += _maybe_apply_rule(lsystem, c, nullptr);
 					cnt++;
 				}
 			}
 		}
-		lstr = lstr_expanded;
+		lstring = lstring_expanded;
 	}
-	return lstr;
+	return lstring;
 }
 
 std::string assemble_lstring_part(Plant &plant);

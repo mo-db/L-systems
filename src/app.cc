@@ -124,7 +124,7 @@ void process_events(App &app) {
 	}
 }
 void update_gui(App &app, Modules &modules) {
-	auto &lsystem = modules.lsystem;
+  auto &lsystem = modules.lsystem;
 
   ImGui_ImplSDLRenderer3_NewFrame();
   ImGui_ImplSDL3_NewFrame();
@@ -156,21 +156,12 @@ void update_gui(App &app, Modules &modules) {
     ImGui::End();
   }
 
-  // // window_c
-  // if (app.gui.show_window_c) {
-  //   ImGui::Begin("Another Window", &app.gui.show_window_c);
-  //   ImGui::Text("Hello from another window!");
-  //   if (ImGui::Button("Close Me"))
-  //     app.gui.show_window_c = false;
-  //   ImGui::End();
-  // }
-
+  // axiom - rules window
   static bool open = true;
   bool *p_open = &open;
-  // *p_open = true;
-
-  // Demonstrate create a window with multiple child windows.
   if (app.gui.show_window_c) {
+
+    // boilderplate
     ImGui::SetNextWindowSize(ImVec2(500, 440), ImGuiCond_FirstUseEver);
     if (ImGui::Begin("Example: Simple layout", p_open,
                      ImGuiWindowFlags_MenuBar)) {
@@ -184,116 +175,99 @@ void update_gui(App &app, Modules &modules) {
         ImGui::EndMenuBar();
       }
 
+      // the axiom
+      if (ImGui::TreeNode("Axiom")) {
+        ImGui::InputText("text", lsystem.axiom.text, lsystem.alphabet_size);
+        ImGui::TreePop();
+      }
 
+			// all rules
+      for (int i = 0; i < lsystem.max_rules; i++) {
+        std::string label = fmt::format("Rule {}", i + 1);
 
-			if (ImGui::TreeNode("Axiom")) 
-			{
-				ImGui::InputText("rule", lsystem.axiom, lsystem.alphabet_size);
-				ImGui::TreePop();
-			}
+        if (ImGui::TreeNode(label.c_str())) {
+					
+					// drop down menu for symbol selection
+          static ImGuiComboFlags flags = 0;
+          const char *combo_preview_value =
+              lsystem.alphabet[lsystem.rules[i].symbol_index];
+          if (ImGui::BeginCombo("symbol", combo_preview_value, flags)) {
+            for (int n = 0; n < lsystem.alphabet_size; n++) {
+              const bool is_selected = (lsystem.rules[i].symbol_index == n);
+              if (ImGui::Selectable(lsystem.alphabet[n], is_selected))
+                lsystem.rules[i].symbol_index = n;
 
-			for (int i = 0; i < lsystem.max_rules; i++) {
-				std::string label = fmt::format("Rule {}", i + 1);
+              // Set the initial focus when opening the combo (scrolling +
+              // keyboard navigation focus)
+              if (is_selected)
+                ImGui::SetItemDefaultFocus();
+            }
+            ImGui::EndCombo();
+          }
 
-				if (ImGui::TreeNode(label.c_str())) 
-				{
+					// rule condition and text
+          ImGui::InputText("condition", lsystem.rules[i].condition,
+                           lsystem.text_size);
+          ImGui::InputText("text", lsystem.rules[i].text, lsystem.text_size);
 
-					static ImGuiComboFlags flags = 0;
-					const char *combo_preview_value = lsystem.alphabet[lsystem.rules[i].letter_index];
-					if (ImGui::BeginCombo("symbol", combo_preview_value, flags))
-					{
-							for (int n = 0; n < lsystem.alphabet_size; n++)
-							{
-									const bool is_selected = (lsystem.rules[i].letter_index == n);
-									if (ImGui::Selectable(lsystem.alphabet[n], is_selected))
-											lsystem.rules[i].letter_index = n;
+					// a button ?
+          if (ImGui::Button("Button")) {
+            fmt::print("cond: {}, letter: {}, text {}\n",
+                       lsystem.rules[i].condition,
+                       lsystem.alphabet[lsystem.rules[i].symbol_index],
+                       lsystem.rules[i].text);
+          }
+          ImGui::TreePop();
+        }
+      }
 
-									// Set the initial focus when opening the combo (scrolling + keyboard navigation focus)
-									if (is_selected)
-											ImGui::SetItemDefaultFocus();
-							}
-							ImGui::EndCombo();
-					}
-					ImGui::InputText("condition", lsystem.rules[i].condition, lsystem.text_size);
-					ImGui::InputText("text", lsystem.rules[i].text, lsystem.text_size);
-					if (ImGui::Button("Button")) {
-						fmt::print("cond: {}, letter: {}, text {}\n", lsystem.rules[i].condition,
-								lsystem.alphabet[lsystem.rules[i].letter_index], lsystem.rules[i].text);
+			// variables
+			ImGui::SliderInt("iterations", &modules.lsystem.iterations, 0, 6);
+			ImGui::SliderFloat("float", &modules.lsystem.standard_length, 0.0, 100.0);
 
-						// exprtk just here for testing remove later, implemented in lsys
-						typedef double T; // numeric type (float, double, mpfr etc...)
-						std::string expression_string = lsystem.rules[i].condition;
-						typedef exprtk::symbol_table<T> symbol_table_t;
-						typedef exprtk::expression<T>   expression_t;
-						typedef exprtk::parser<T>       parser_t;
-						T x = T(123.456);
-						T y = T(98.98);
-						T z = T(0.0);
-
-						symbol_table_t symbol_table;
-						symbol_table.add_variable("x",x);
-						symbol_table.add_variable("y",y);
-						symbol_table.add_variable("z",z);
-
-						expression_t expression;
-						expression.register_symbol_table(symbol_table);
-
-						parser_t parser;
-
-						if (!parser.compile(expression_string,expression))
-						{
-							 printf("Expression Compilation error...\n");
-							 return;
-						}
-
-						T result = expression.value();
-						fmt::print("exprtk result: {}\n", result);
-
-					}
-					ImGui::TreePop();
-				}
-			}
-
-
-			enum class Selected {
-				NONE,
-				AXIOM,
-				RULE_A,
-			};
+      enum class Selected {
+        NONE,
+        AXIOM,
+        RULE_A,
+      };
 
       // Left
       static Selected selected = Selected::NONE;
       {
         ImGui::BeginChild("left pane", ImVec2(150, 0),
                           ImGuiChildFlags_Borders | ImGuiChildFlags_ResizeX);
-				if (ImGui::Selectable("axiom", selected == Selected::AXIOM)) {
-					selected = Selected::AXIOM;
-				}
-        static char axiom[32] = ""; ImGui::InputText("default", axiom, 32);
+        if (ImGui::Selectable("axiom", selected == Selected::AXIOM)) {
+          selected = Selected::AXIOM;
+        }
+        static char axiom[32] = "";
+        ImGui::InputText("default", axiom, 32);
 
-				if (ImGui::Selectable("rule_A", selected == Selected::RULE_A)) {
-					selected = Selected::RULE_A;
-				}
-				if (ImGui::Button("unselect")) {
-					selected = Selected::NONE;
-				}
+        if (ImGui::Selectable("rule_A", selected == Selected::RULE_A)) {
+          selected = Selected::RULE_A;
+        }
+        if (ImGui::Button("unselect")) {
+          selected = Selected::NONE;
+        }
 
         ImGui::EndChild();
       }
       ImGui::SameLine();
-			{
-				ImGui::BeginChild("test view", ImVec2(0, -ImGui::GetFrameHeightWithSpacing()));
-        static char axiom[32] = ""; ImGui::InputText("default", axiom, 32);
-				ImGui::EndChild();
-			}
+      {
+        ImGui::BeginChild("test view",
+                          ImVec2(0, -ImGui::GetFrameHeightWithSpacing()));
+        static char axiom[32] = "";
+        ImGui::InputText("default", axiom, 32);
+        ImGui::EndChild();
+      }
 
       // Right
       // {
       // 		ImGui::BeginGroup();
       // 		ImGui::BeginChild("item view", ImVec2(0,
       // -ImGui::GetFrameHeightWithSpacing())); // Leave room for 1 line below
-      // us 		ImGui::Text("MyObject: %d", selected); 		ImGui::Separator(); 		if
-      // (ImGui::BeginTabBar("##Tabs", ImGuiTabBarFlags_None))
+      // us 		ImGui::Text("MyObject: %d", selected);
+      // ImGui::Separator(); 		if (ImGui::BeginTabBar("##Tabs",
+      // ImGuiTabBarFlags_None))
       // 		{
       // 				if (ImGui::BeginTabItem("Description"))
       // 				{
@@ -305,7 +279,7 @@ void update_gui(App &app, Modules &modules) {
       // 				if (ImGui::BeginTabItem("Details"))
       // 				{
       // 						ImGui::Text("ID:
-      // 0123456789"); 						ImGui::EndTabItem();
+      // 0123456789"); ImGui::EndTabItem();
       // 				}
       // 				ImGui::EndTabBar();
       // 		}
