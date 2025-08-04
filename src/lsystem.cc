@@ -1,19 +1,23 @@
 #include "lsystem.hpp"
 
 namespace turtle {
-void move(Turtle &turtle, const double length) {
-	turtle.p.x += length * cos(turtle.angle);
-	turtle.p.y += length * -sin(turtle.angle);
+Vec2 calculate_move(Turtle &turtle, const double length) {
+	Vec2 position = *turtle.node;
+	position.x += length * cos(turtle.angle);
+	position.y += length * -sin(turtle.angle);
+ 	// fmt::print("pos.x: {}, pos.y: {}\n", position.x, position.y);
+	return position;
 }
 void turn(Turtle &turtle, const double angle) { turtle.angle += angle; }
 } // namespace turtle
 
 
 namespace lsystem {
-void _turtle_action(Turtle &turtle, std::vector<Turtle> &turtle_stack,
-                   Plant &plant, Lsystem &lsystem, const char c,
+void _turtle_action(Plant &plant, Lsystem &lsystem, const char c,
                    const double *value) {
 	double x;
+	Turtle &turtle = plant.turtle;
+	std::vector<Turtle> &turtle_stack = plant.turtle_stack;
 
 	// grow branch
 	if (std::isalpha(c)) {
@@ -26,11 +30,11 @@ void _turtle_action(Turtle &turtle, std::vector<Turtle> &turtle_stack,
 		} else {
 			x = lsystem.standard_length;
 		}
-    turtle::move(turtle, x);
-		fmt::print("turtle.x: {}, turtle.y: {}\n", turtle.p.x, turtle.p.y);
-		plant.add_node(turtle.p);
-    plant.branches.push_back(Branch{turtle.current_node, plant.nodes.back().id, c, visable, 1.0});
-		turtle.current_node = plant.nodes.back().id;
+
+		Vec2 *last_node = turtle.node;
+		Vec2 *new_node = plant.add_node(turtle::calculate_move(turtle, x));
+		turtle.node = new_node;
+    plant.branches.push_back(Branch{last_node, new_node, c, visable, 1.0});
 	}
 
 	// turn turtle counter-clockwise
@@ -63,18 +67,17 @@ void _turtle_action(Turtle &turtle, std::vector<Turtle> &turtle_stack,
 	}
 }
 
-Plant generate_plant(Turtle &turtle, std::vector<Turtle> &turtle_stack, Lsystem &lsystem, const Vec2 start, const std::string lstring) {
-	Plant plant{}; 
-	plant.add_node(start);
-	turtle.current_node = plant.nodes.back().id;
-	turtle.p = start;
+Plant generate_plant(Lsystem &lsystem, const Vec2 start, const std::string lstring) {
+	Plant plant{};
+	plant.turtle.node = plant.add_node(start);
+	// fmt::print("turtle.x: {}, turtle.y: {}\n", plant.turtle.node->x, plant.turtle.node->y);
 
 	int counter = 0;
 	while (counter < (int)lstring.size()) {
 		char c = lstring[counter];
 
 		if (c == '[' || c == ']') {
-			_turtle_action(turtle, turtle_stack, plant, lsystem, c, nullptr);
+			_turtle_action(plant, lsystem, c, nullptr);
 			counter++;
 		} else {
 			// check if not last char
@@ -87,16 +90,16 @@ Plant generate_plant(Turtle &turtle, std::vector<Turtle> &turtle_stack, Lsystem 
 						value_string += lstring[counter++];
 					}
 					double value = atof(value_string.c_str());
-					_turtle_action(turtle, turtle_stack, plant, lsystem, c, &value);
+					_turtle_action(plant, lsystem, c, &value);
 					counter++;
 					// no () follows
 				} else {
-					_turtle_action(turtle, turtle_stack, plant, lsystem, c, nullptr);
+					_turtle_action(plant, lsystem, c, nullptr);
 					counter++;
 				}
 			// end of string follows
 			} else {
-				_turtle_action(turtle, turtle_stack, plant, lsystem, c, nullptr);
+				_turtle_action(plant, lsystem, c, nullptr);
 				counter++;
 			}
 		}

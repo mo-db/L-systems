@@ -3,79 +3,62 @@
 #include "core.hpp"
 #include "graphics.hpp"
 
-struct Node {
-	Vec2 p{};
-	int id = -1;
-};
+constexpr int MAX_NODES = 4096;
 
 struct Branch {
-	int n1_id = -1;
-	int n2_id = -1;
+	Vec2 *n1 = nullptr;
+	Vec2 *n2 = nullptr;
 	char branch_type;
 	bool visible = false;
 	float wd = 0.0;
 };
 
-struct Plant {
-  std::vector<Node> nodes;
-  int _node_id_cnt = 0;
-	// int active_node = -1;
-  std::vector<Branch> branches;
-
-  bool node_exists(int id) {
-    for (auto &node : nodes) {
-      if (node.id == id) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  Node get_node(int id) {
-    for (auto &node : nodes) {
-      if (node.id == id) {
-        return node;
-      }
-    }
-    return Node{};
-  }
-
-  void add_node(Vec2 position) {
-		nodes.push_back({position, _node_id_cnt++});
-	}
-
-  bool pop_node(int node_id) {
-    for (auto iter = nodes.begin(); iter != nodes.end(); iter++) {
-      if ((*iter).id == node_id) {
-        nodes.erase(iter);
-        return true;
-      }
-    }
-    return false;
-  }
-};
-
 struct Turtle {
-	Vec2 p{};
-	int current_node = -1;
+	Vec2 *node = nullptr;
 	double angle = gk::pi / 2.0;
   Turtle() = default;
-  Turtle(int current_node, const double angle)
-      : current_node{current_node}, angle{angle} {}
+  Turtle(const double angle)
+      : angle{angle} {}
+};
+
+struct Plant {
+  std::array<Vec2, MAX_NODES> nodes; // unsorted
+	int node_counter = 0;
+  std::vector<Branch> branches; // sorts the nodes
+	Vec2 *add_node(Vec2 p) {
+		nodes[node_counter++] = p;
+		return &nodes[node_counter - 1];
+	}
+	Turtle turtle{};
+	std::vector<Turtle> turtle_stack;
 };
 
 namespace turtle {
-void move(Turtle &turtle, const double length);
+Vec2 calculate_move(Turtle &turtle, const double length);
 void turn(Turtle &turtle, const double angle);
 } // namespace turtle
 
 
+
 struct Lsystem {
-	std::string alphabet = "A,a,B,b,+,-,";
-	struct Axiom {
-		std::string lstring = "";
-		Plant plant{};
-	} axiom;
+	static constexpr int alphabet_size = 6;
+	static constexpr int text_size = 512;
+	static constexpr int max_rules = 10;
+
+  const char *alphabet[alphabet_size] = { "A", "a", "B", "b", "+", "-" };
+	char axiom[text_size] = "";
+	Plant axiomm{};
+	struct Rule {
+		int letter_index = 0;
+		char condition[text_size] = "";
+		char text[text_size] = "";
+	};
+	std::array<Rule, max_rules> rules;
+
+	// struct Axiom {
+	// 	std::string lstring = "";
+	// 	Plant plant{};
+	// } axiom;
 	// std::string axiom = "";
 	std::string rule_A = "";
 	int iterations = 0;
@@ -85,8 +68,7 @@ struct Lsystem {
 };
 
 namespace lsystem {
-Plant generate_plant(Turtle &turtle, std::vector<Turtle> &turtle_stack,
-                     Lsystem &lsystem, const Vec2 start,
+Plant generate_plant(Lsystem &lsystem, const Vec2 start,
                      const std::string lstring);
 std::string generate_lstring(Lsystem &lsystem);
 std::string assemble_lstring_part(Plant &plant);

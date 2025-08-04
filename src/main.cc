@@ -147,8 +147,8 @@ int main() {
 	app::init(app, 960, 540);
 
 	app.gui.clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
-	app.gui.show_window_a = false;
-	app.gui.show_window_b = false;
+	app.gui.show_window_a = true;
+	app.gui.show_window_b = true;
 	app.gui.show_window_c = true;
 
 	Modules modules;
@@ -158,21 +158,19 @@ int main() {
 		app::lock_frame_buf(app);
 
 		// now the actuall app
-		Plant &axiom = modules.lsystem.axiom.plant;
+		Plant &axiom = modules.lsystem.axiomm;
 		std::string axiom_str = "A[+A]A[-A]A";
 
-		axiom = lsystem::generate_plant(modules.turtle, modules.turtle_stack,
-				modules.lsystem, Vec2{(double)app.video.width / 3.0, (double)app.video.height - 100.0},
+		axiom = lsystem::generate_plant(modules.lsystem, Vec2{(double)app.video.width / 3.0, (double)app.video.height - 100.0},
 				axiom_str);
 
 		// string result = generate_lstr(modules.lsystem);
 		// process_lstring(result, turtle, tstack, plant, modules.lsystem);
 
 
-		fmt::print("branches: {}\n", (int)axiom.branches.size());
+		// fmt::print("branches: {}\n", (int)axiom.branches.size());
 		for (auto &branch : axiom.branches) {
-			draw::line(app, {axiom.get_node(branch.n1_id).p,
-											 axiom.get_node(branch.n2_id).p}, color::fg, 0.0);
+			draw::line(app, {*(branch.n1), *(branch.n2)}, color::fg, 0.0);
 		}
 
 		app::update_gui(app, modules);

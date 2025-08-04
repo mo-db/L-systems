@@ -6,4 +6,4 @@ sdl3_dep = dependency('sdl3')
 fmt_dep = dependency('fmt')
 imgui_dep = dependency('imgui')
 
-subdir('src_novec')
+subdir('src')

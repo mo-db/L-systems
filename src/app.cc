@@ -40,8 +40,10 @@ void init(App &app, int width, int height) {
 	// Had to change scaling mode in imgui sdlrenderer3 backend
 	// -> SDL_SetTextureScaleMode(bd->FontTexture, SDL_SCALEMODE_NEAREST);
 	ImGuiStyle& style = ImGui::GetStyle();
-	// app.gui.io->FontGlobalScale = app.video.window_scale;
+	app.gui.io->FontGlobalScale = 0.5f;
 	style.ScaleAllSizes(app.video.window_scale);
+
+	app.gui.io->Fonts->AddFontFromFileTTF("/Users/moritz/Library/Fonts/IosevkaFixedSS14-Oblique.ttf", 30.0f);
 
 	// Setup Platform/Renderer backends
 	ImGui_ImplSDL3_InitForSDLRenderer(app.video.window, app.video.renderer);
@@ -122,6 +124,8 @@ void process_events(App &app) {
 	}
 }
 void update_gui(App &app, Modules &modules) {
+	auto &lsystem = modules.lsystem;
+
   ImGui_ImplSDLRenderer3_NewFrame();
   ImGui_ImplSDL3_NewFrame();
   ImGui::NewFrame();
@@ -180,6 +184,47 @@ void update_gui(App &app, Modules &modules) {
         ImGui::EndMenuBar();
       }
 
+
+
+			if (ImGui::TreeNode("Axiom")) 
+			{
+				ImGui::InputText("rule", lsystem.axiom, lsystem.alphabet_size);
+				ImGui::TreePop();
+			}
+
+			for (int i = 0; i < lsystem.max_rules; i++) {
+				std::string label = fmt::format("Rule {}", i + 1);
+
+				if (ImGui::TreeNode(label.c_str())) 
+				{
+
+					static ImGuiComboFlags flags = 0;
+					const char *combo_preview_value = lsystem.alphabet[lsystem.rules[i].letter_index];
+					if (ImGui::BeginCombo("symbol", combo_preview_value, flags))
+					{
+							for (int n = 0; n < lsystem.alphabet_size; n++)
+							{
+									const bool is_selected = (lsystem.rules[i].letter_index == n);
+									if (ImGui::Selectable(lsystem.alphabet[n], is_selected))
+											lsystem.rules[i].letter_index = n;
+
+									// Set the initial focus when opening the combo (scrolling + keyboard navigation focus)
+									if (is_selected)
+											ImGui::SetItemDefaultFocus();
+							}
+							ImGui::EndCombo();
+					}
+					ImGui::InputText("condition", lsystem.rules[i].condition, lsystem.text_size);
+					ImGui::InputText("text", lsystem.rules[i].text, lsystem.text_size);
+					if (ImGui::Button("Button")) {
+						fmt::print("cond: {}, letter: {}, text {}\n", lsystem.rules[i].condition,
+								lsystem.alphabet[lsystem.rules[i].letter_index], lsystem.rules[i].text);
+					}
+					ImGui::TreePop();
+				}
+			}
+
+
 			enum class Selected {
 				NONE,
 				AXIOM,
@@ -194,6 +239,7 @@ void update_gui(App &app, Modules &modules) {
 				if (ImGui::Selectable("axiom", selected == Selected::AXIOM)) {
 					selected = Selected::AXIOM;
 				}
+        static char axiom[32] = ""; ImGui::InputText("default", axiom, 32);
 
 				if (ImGui::Selectable("rule_A", selected == Selected::RULE_A)) {
 					selected = Selected::RULE_A;
@@ -205,6 +251,11 @@ void update_gui(App &app, Modules &modules) {
         ImGui::EndChild();
       }
       ImGui::SameLine();
+			{
+				ImGui::BeginChild("test view", ImVec2(0, -ImGui::GetFrameHeightWithSpacing()));
+        static char axiom[32] = ""; ImGui::InputText("default", axiom, 32);
+				ImGui::EndChild();
+			}
 
       // Right
       // {
