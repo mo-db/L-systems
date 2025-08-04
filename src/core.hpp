@@ -33,6 +33,7 @@
 #include "imgui.h"
 #include "imgui_impl_sdl3.h"
 #include "imgui_impl_sdlrenderer3.h"
+#include "exprtk.hpp"
 
 namespace gk {
 constexpr double epsilon = 1e-6;

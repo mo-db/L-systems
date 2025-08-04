@@ -45,14 +45,18 @@ struct Lsystem {
 	static constexpr int text_size = 512;
 	static constexpr int max_rules = 10;
 
+	// A-K
   const char *alphabet[alphabet_size] = { "A", "a", "B", "b", "+", "-" };
 	char axiom[text_size] = "";
 	Plant axiomm{};
 	struct Rule {
 		int letter_index = 0;
-		char condition[text_size] = "";
+		char condition[text_size] = "1.0";
 		char text[text_size] = "";
 	};
+	struct Vars {
+		double l{}, m{}, n{}, o{}, p{}, q{}, r{}, s{}, t{}, u{}, v{}, w{};
+	} vars;
 	std::array<Rule, max_rules> rules;
 
 	// struct Axiom {

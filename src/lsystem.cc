@@ -85,7 +85,7 @@ Plant generate_plant(Lsystem &lsystem, const Vec2 start, const std::string lstri
 				// () follows -> process whole string
 				if (lstring[counter+1] == '(') {
 					counter += 2; // skip bracket
-					std::string value_string = "";
+std::string value_string = "";
 					while (lstring[counter] != ')') {
 						value_string += lstring[counter++];
 					}
@@ -107,6 +107,140 @@ Plant generate_plant(Lsystem &lsystem, const Vec2 start, const std::string lstri
 
 	return plant;
 }
-std::string generate_lstring(Lsystem &lsystem);
+
+
+double _eval_expr(std::string &expr_string, Lsystem &lsystem, const double in_x, const double in_y, const double in_z) {
+	typedef double T; // numeric type (float, double, mpfr etc...)
+
+	typedef exprtk::symbol_table<T> symbol_table_t;
+	typedef exprtk::expression<T>   expression_t;
+	typedef exprtk::parser<T>       parser_t;
+
+	T x = T(in_x);
+	T y = T(in_y);
+	T z = T(in_z);
+	T l = T(lsystem.vars.l);
+	T m = T(lsystem.vars.m);
+	// all others
+
+	symbol_table_t symbol_table;
+	symbol_table.add_variable("x",x);
+	symbol_table.add_variable("y",y);
+	symbol_table.add_variable("z",z);
+	symbol_table.add_variable("m",m);
+	symbol_table.add_variable("l",l);
+
+	expression_t expr;
+	expr.register_symbol_table(symbol_table);
+
+	parser_t parser;
+
+	if (!parser.compile(expr_string, expr))
+	{
+		 printf("Expression compilation error...\n");
+		 return std::numeric_limits<double>::max();
+	}
+
+	return (T)expr.value();
+}
+
+
+std::string _maybe_apply_rule(Lsystem &lsystem, const char sym, const double *x_in) {
+	double x{}, y{}, z{};
+	if (x_in) {
+		x = *x_in;	
+	} else {
+		if (sym == '+' || sym  == '-') {
+			x = lsystem.standard_angle;
+		} else {
+			x = lsystem.standard_length;
+		}
+	}
+
+	// check all rules
+	for (auto &rule : lsystem.rules) {
+		const char *letter_string = lsystem.alphabet[rule.letter_index];
+		char symbol = letter_string[0];
+		std::string condition = rule.condition;
+		// if there is a rule for the symbol, check if condition is true
+		if (symbol == sym) {
+			double result = _eval_expr(condition, lsystem, x, 0.0, 0.0);
+			if (util::equal_epsilon(result, 1.0)) {
+				// std::vector<char> no_replace_symbols;
+				std::string text = rule.text;
+				std::string return_str = "";
+				int cnt = 0;
+				while (cnt < (int)text.size()) {
+					char c = text[cnt];
+					if (c == '(') {
+						std::string expr_str = "";
+						return_str += c;
+						while ((c = text[++cnt]) != ')') {
+							expr_str += c;
+						}
+						double expr_str_result = _eval_expr(expr_str, lsystem, x, y, z);
+						fmt::print("expr_str_result: {}\n", expr_str_result);
+						return_str += std::to_string(expr_str_result);
+						return_str += c;
+						cnt++;
+					} else {
+						return_str += c;
+						cnt++;
+					}
+				}
+				return return_str;
+			}
+		}
+	}
+	if (x) {
+		return fmt::format("{}({})", sym, x);
+	} else {
+		return fmt::format("{}", sym);
+	}
+}
+
+std::string generate_lstring(Lsystem &lsystem) {
+	std::string lstr_expanded;
+	std::string lstr = lsystem.axiom;
+	for (int i = 0; i < lsystem.iterations; i++) {
+		lstr_expanded = "";
+		int cnt = 0;
+		while (cnt < (int)lstr.size()) {
+			char c = lstr[cnt];
+			// if stack symbol -> copy and continue
+			if (c == '[' || c == ']') {
+				lstr_expanded += c;
+				cnt++;
+			// else process
+			} else {
+				// check if not last char
+				if (cnt + 1 < (int)lstr.size()) {
+					// () follows -> process whole string
+					if (lstr[cnt+1] == '(') {
+						cnt += 2; // skip bracket
+						std::string value_string = "";
+						while (lstr[cnt] != ')') {
+							value_string += lstr[cnt++];
+						}
+						double value = atof(value_string.c_str());
+						lstr_expanded += _maybe_apply_rule(lsystem, c, &value);
+						cnt++;
+						// no () follows
+					} else {
+						lstr_expanded += _maybe_apply_rule(lsystem, c, nullptr);
+						cnt++;
+					}
+				// end of string follows
+				} else {
+					lstr_expanded += _maybe_apply_rule(lsystem, c, nullptr);
+					cnt++;
+				}
+			}
+		}
+		lstr = lstr_expanded;
+	}
+	return lstr;
+}
+
 std::string assemble_lstring_part(Plant &plant);
 } // namespace lsystem

@@ -219,6 +219,36 @@ void update_gui(App &app, Modules &modules) {
 					if (ImGui::Button("Button")) {
 						fmt::print("cond: {}, letter: {}, text {}\n", lsystem.rules[i].condition,
 								lsystem.alphabet[lsystem.rules[i].letter_index], lsystem.rules[i].text);
+
+						// exprtk just here for testing remove later, implemented in lsys
+						typedef double T; // numeric type (float, double, mpfr etc...)
+						std::string expression_string = lsystem.rules[i].condition;
+						typedef exprtk::symbol_table<T> symbol_table_t;
+						typedef exprtk::expression<T>   expression_t;
+						typedef exprtk::parser<T>       parser_t;
+						T x = T(123.456);
+						T y = T(98.98);
+						T z = T(0.0);
+
+						symbol_table_t symbol_table;
+						symbol_table.add_variable("x",x);
+						symbol_table.add_variable("y",y);
+						symbol_table.add_variable("z",z);
+
+						expression_t expression;
+						expression.register_symbol_table(symbol_table);
+
+						parser_t parser;
+
+						if (!parser.compile(expression_string,expression))
+						{
+							 printf("Expression Compilation error...\n");
+							 return;
+						}
+
+						T result = expression.value();
+						fmt::print("exprtk result: {}\n", result);
+
 					}
 					ImGui::TreePop();
 				}
