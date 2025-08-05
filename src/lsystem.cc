@@ -1,6 +1,26 @@
 #include "lsystem.hpp"
 
 namespace lsystem {
+
+// iter must be on (, if > 0 iter will return on )
+// int -> how much to increment the iter after done, if 0, bracket didnt close
+int _get_expr_string(const std::string &in_string, std::string &expr_string, int iter) {
+	if (in_string[iter] == '(') {
+		iter++;
+	} else {
+		return 0;
+	}
+	bool bracket_closes;
+	while ((bracket_closes = (iter < (int)in_string.size())) && in_string[iter] != ')') {
+		expr_string += in_string[iter++];
+	}
+	if (bracket_closes) {
+		return iter;
+	} else {
+		return 0;
+	}
+}
+
 Vec2 _calculate_move(Turtle &turtle, const double length) {
 	Vec2 position = *turtle.node;
 	position.x += length * cos(turtle.angle);
@@ -64,49 +84,54 @@ void _turtle_action(Plant &plant, Lsystem &lsystem, const char c,
 	}
 }
 
-Plant generate_plant(Lsystem &lsystem, const Vec2 start, const std::string lstring) {
-	Plant plant{};
-	plant.turtle.node = plant.add_node(start);
-	// fmt::print("turtle.x: {}, turtle.y: {}\n", plant.turtle.node->x, plant.turtle.node->y);
 
-	int counter = 0;
-	while (counter < (int)lstring.size()) {
-		char c = lstring[counter];
+Plant generate_plant(Lsystem &lsystem, const Vec2 start, const std::string lstring) {
+	Plant plant{}; // plant muss parameter sein
+	plant.turtle.node = plant.add_node(start);
+
+	int index = 0;
+	while (index < (int)lstring.size()) {
+		char c = lstring[index];
 
 		if (c == '[' || c == ']') {
 			_turtle_action(plant, lsystem, c, nullptr);
-			counter++;
+			index++;
 		} else {
-			// check if not last char
-			if (counter + 1 < (int)lstring.size()) {
-				// () follows -> process whole string
-				if (lstring[counter+1] == '(') {
-					counter += 2; // skip bracket
-std::string value_string = "";
-					while (lstring[counter] != ')') {
-						value_string += lstring[counter++];
+
+			// check c is the last character in the string
+			if (index + 1 < (int)lstring.size()) {
+
+				if (lstring[index + 1] == '(') {
+					std::string expr_string = "";
+					int expr_index = _get_expr_string(lstring, expr_string, index + 1);
+					if (expr_index > 0) {
+						index = expr_index;
+						// expr_string valid, do stuff here
+						double value = atof(expr_string.c_str());
+						_turtle_action(plant, lsystem, c, &value);
+						index++;
+					} else {
+						_turtle_action(plant, lsystem, c, nullptr);
+						index++;
 					}
-					double value = atof(value_string.c_str());
-					_turtle_action(plant, lsystem, c, &value);
-					counter++;
-					// no () follows
+
 				} else {
 					_turtle_action(plant, lsystem, c, nullptr);
-					counter++;
+					index++;
 				}
-			// end of string follows
+
 			} else {
 				_turtle_action(plant, lsystem, c, nullptr);
-				counter++;
+				index++;
 			}
+
 		}
 	}
-
 	return plant;
 }
 
 
-double _eval_expr(std::string &expr_string, Lsystem &lsystem, const double in_x, const double in_y, const double in_z) {
+std::optional<double> _eval_expr(std::string &expr_string, Lsystem &lsystem, const double in_x) {
 	typedef double T; // numeric type (float, double, mpfr etc...)
 
 	typedef exprtk::symbol_table<T> symbol_table_t;
@@ -114,16 +139,16 @@ double _eval_expr(std::string &expr_string, Lsystem &lsystem, const double in_x,
 	typedef exprtk::parser<T>       parser_t;
 
 	T x = T(in_x);
-	T y = T(in_y);
-	T z = T(in_z);
+	// T y = T(in_y);
+	// T z = T(in_z);
 	T l = T(lsystem.vars.l);
 	T m = T(lsystem.vars.m);
 	// all others
 
 	symbol_table_t symbol_table;
 	symbol_table.add_variable("x",x);
-	symbol_table.add_variable("y",y);
-	symbol_table.add_variable("z",z);
+	// symbol_table.add_variable("y",y);
+	// symbol_table.add_variable("z",z);
 	symbol_table.add_variable("m",m);
 	symbol_table.add_variable("l",l);
 
@@ -131,20 +156,19 @@ double _eval_expr(std::string &expr_string, Lsystem &lsystem, const double in_x,
 	expr.register_symbol_table(symbol_table);
 
 	parser_t parser;
-
-	if (!parser.compile(expr_string, expr))
-	{
-		 printf("Expression compilation error...\n");
-		 return std::numeric_limits<double>::max();
+	if (!parser.compile(expr_string, expr)) {
+		fmt::print("Expression compile error...\n");
+		return {};
 	}
 
 	return (T)expr.value();
 }
 
 
+
 std::string _maybe_apply_rule(Lsystem &lsystem, const char symbol, const double *x_in) {
 	// if no value specified in braces, set fitting default
-	double x{}, y{}, z{};
+	double x{}; //, y{}, z{};
 	if (x_in) {
 		x = *x_in;	
 	} else {
@@ -163,28 +187,51 @@ std::string _maybe_apply_rule(Lsystem &lsystem, const char symbol, const double 
 
 		// if there is a rule with fitting symbol, check if condition is true
 		if (rule_symbol == symbol) {
-			double result = _eval_expr(condition, lsystem, x, 0.0, 0.0);
-			if (util::equal_epsilon(result, 1.0)) {
+
+			// call function with expected<>
+			auto result = _eval_expr(condition, lsystem, x);
+			if (!result) {
+				rule.condition_state = Lsystem::FIELD_STATE::ERROR;
+			} else if (util::equal_epsilon(result.value(), 1.0)) {
+				rule.condition_state = Lsystem::FIELD_STATE::TRUE;
+			} else {
+				rule.condition_state = Lsystem::FIELD_STATE::FALSE;
+			}
+
+			if (rule.condition_state == Lsystem::FIELD_STATE::TRUE) {
 				std::string return_str = "";
-				int cnt = 0;
+				int index = 0;
 
 				// substitute the symbol for the rule, with evaluated expressions
-				while (cnt < (int)text.size()) {
-					char c = text[cnt];
+				while (index < (int)text.size()) {
+					char c = text[index];
+					// check if c needs to be expanded
 					if (c == '(') {
-						std::string expr_str = "";
-						return_str += c;
-						while ((c = text[++cnt]) != ')') {
-							expr_str += c;
+						std::string expr_string = "";
+						int expr_index = _get_expr_string(text, expr_string, index);
+						// check if bracked_closed, if then increment index and return
+						if (expr_index > 0) {
+							// expr_string valid
+							auto result = _eval_expr(expr_string, lsystem, x);
+							double expr_value;
+							if (!result) {
+								expr_value = 0.0;
+							} else {
+								expr_value = result.value();
+							}
+							return_str += fmt::format("{}", expr_value);
+							index = expr_index;
+							index++;
+							// if it didnt close add c and return
+						} else {
+							return_str += c;
+							index++;
 						}
-						double expr_str_result = _eval_expr(expr_str, lsystem, x, y, z);
-						fmt::print("expr_str_result: {}\n", expr_str_result);
-						return_str += std::to_string(expr_str_result);
-						return_str += c;
-						cnt++;
+
+						// add c to return string and continue
 					} else {
 						return_str += c;
-						cnt++;
+						index++;
 					}
 				}
 				return return_str;
@@ -206,37 +253,53 @@ std::string generate_lstring(Lsystem &lsystem) {
 	std::string lstring = lsystem.axiom.text;
 	for (int i = 0; i < lsystem.iterations; i++) {
 		lstring_expanded = "";
-		int cnt = 0;
-		while (cnt < (int)lstring.size()) {
-			char c = lstring[cnt];
+		int index = 0;
+		while (index < (int)lstring.size()) {
+			char c = lstring[index];
+
 			// if stack symbol -> copy and continue
 			if (c == '[' || c == ']') {
 				lstring_expanded += c;
-				cnt++;
-			// else process
+				index++;
 			} else {
-				// check if not last char
-				if (cnt + 1 < (int)lstring.size()) {
-					// () follows -> process whole string
-					if (lstring[cnt+1] == '(') {
-						cnt += 2; // skip bracket
-						std::string value_string = "";
-						while (lstring[cnt] != ')') {
-							value_string += lstring[cnt++];
+
+				// check c is the last character in the string
+				if (index + 1 < (int)lstring.size()) {
+
+					// check if the next character is an open bracket
+					if (lstring[index + 1] == '(') {
+						std::string expr_string = "";
+						int expr_index = _get_expr_string(lstring, expr_string, index+1);
+						if (expr_index > 0) {
+							// expr_string valid, do stuff here
+
+							// evaluate expression to double
+							auto result = _eval_expr(expr_string, lsystem, 0.0);
+							double expr_value;
+							if (!result) {
+								expr_value = 0.0; // dont know if this is enough error detection
+							} else {
+								expr_value = result.value();
+							}
+
+							lstring_expanded += _maybe_apply_rule(lsystem, c, &expr_value);
+							index = expr_index;
+							index++;
+						} else {
+							lstring_expanded += _maybe_apply_rule(lsystem, c, nullptr);
+							index++;
 						}
-						double value = atof(value_string.c_str());
-						lstring_expanded += _maybe_apply_rule(lsystem, c, &value);
-						cnt++;
-						// no () follows
+
 					} else {
 						lstring_expanded += _maybe_apply_rule(lsystem, c, nullptr);
-						cnt++;
+						index++;
 					}
-				// end of string follows
+
 				} else {
 					lstring_expanded += _maybe_apply_rule(lsystem, c, nullptr);
-					cnt++;
+					index++;
 				}
+
 			}
 		}
 		lstring = lstring_expanded;

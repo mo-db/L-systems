@@ -26,6 +26,8 @@
 // debugging
 #include <cassert>
 #include <chrono>
+#include <expected>
+#include <optional>
 
 // SDL
 #include <SDL3/SDL.h>

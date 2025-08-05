@@ -46,6 +46,11 @@ struct Lsystem {
 
 	// A-K
   const char *alphabet[alphabet_size] = { "A", "a", "B", "b", "+", "-" };
+	enum class FIELD_STATE {
+		TRUE,
+		FALSE,
+		ERROR,
+	};
 	struct Axiom {
 		char text[text_size] = "";
 		Plant plant;
@@ -53,6 +58,7 @@ struct Lsystem {
 	struct Rule {
 		int symbol_index = 0;
 		char condition[text_size] = "1.0";
+		FIELD_STATE condition_state = FIELD_STATE::FALSE;
 		char text[text_size] = "";
 		Plant plant{};
 	};
@@ -61,6 +67,8 @@ struct Lsystem {
 
 namespace lsystem {
 // generate plant from lstring
+
+int _get_expr_string(const std::string &in_string, std::string &expr_string, int iter);
 Vec2 _calculate_move(Turtle &turtle, const double length);
 void _turn(Turtle &turtle, const double angle);
 void _turtle_action(Plant &plant, Lsystem &lsystem, const char c,
@@ -69,8 +77,8 @@ Plant generate_plant(Lsystem &lsystem, const Vec2 start,
                      const std::string lstring);
 
 // generate the complete lstring from axiom and rules
-double _eval_expr(std::string &expr_string, Lsystem &lsystem, const double in_x,
-                  const double in_y, const double in_z);
+std::optional<double> _eval_expr(std::string &expr_string, Lsystem &lsystem, const double in_x);
+
 std::string _maybe_apply_rule(Lsystem &lsystem, const char symbol,
                               const double *x_in);
 std::string generate_lstring(Lsystem &lsystem);

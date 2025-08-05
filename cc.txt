@@ -1,0 +1,2 @@
+- use asserts at function start
+- use std::expected as return if possible

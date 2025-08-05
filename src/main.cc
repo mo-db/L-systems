@@ -10,8 +10,8 @@ int main() {
 	app::init(app, 960, 540);
 
 	app.gui.clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
-	app.gui.show_window_a = false;
-	app.gui.show_window_b = false;
+	app.gui.show_window_a = true;
+	app.gui.show_window_b = true;
 	app.gui.show_window_c = true;
 
 	Modules modules;

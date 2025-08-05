@@ -206,8 +206,20 @@ void update_gui(App &app, Modules &modules) {
           }
 
 					// rule condition and text
-          ImGui::InputText("condition", lsystem.rules[i].condition,
-                           lsystem.text_size);
+
+					if (lsystem.rules[i].condition_state == Lsystem::FIELD_STATE::ERROR) {
+						ImGui::PushStyleColor(ImGuiCol_Text, (ImVec4)ImColor::HSV(0.0f, 0.8f, 0.8f));
+					} else if (lsystem.rules[i].condition_state == Lsystem::FIELD_STATE::TRUE) {
+						ImGui::PushStyleColor(ImGuiCol_Text, (ImVec4)ImColor::HSV(0.3f, 0.8f, 0.8f));
+					} else {
+					ImGui::PushStyleColor(ImGuiCol_Text, (ImVec4)ImColor::HSV(1.0f, 0.0f, 1.0f));
+					}
+					ImGui::InputText("condition", lsystem.rules[i].condition,
+													 lsystem.text_size);
+					ImGui::PopStyleColor();
+
+
+
           ImGui::InputText("text", lsystem.rules[i].text, lsystem.text_size);
 
 					// a button ?
