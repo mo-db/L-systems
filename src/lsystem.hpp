@@ -20,7 +20,7 @@ struct Turtle {
 };
 
 struct Plant {
-	static constexpr int MAX_NODES = 4096;
+	static constexpr int MAX_NODES = 10000;
   std::array<Vec2, MAX_NODES> nodes; // unsorted
 	int node_counter = 0;
   std::vector<Branch> branches; // sorts the nodes
@@ -39,10 +39,13 @@ struct Lsystem {
 	float standard_angle = gk::pi / 6.0;
 	static constexpr int alphabet_size = 6;
 	static constexpr int text_size = 512;
-	static constexpr int max_rules = 10;
+	static constexpr int max_rules = 3;
 	struct Vars {
 		double l{}, m{}, n{}, o{}, p{}, q{}, r{}, s{}, t{}, u{}, v{}, w{};
 	} vars;
+
+	Plant plant{};
+	std::string lstring = "";
 
 	// A-K
   const char *alphabet[alphabet_size] = { "A", "a", "B", "b", "+", "-" };
@@ -57,7 +60,7 @@ struct Lsystem {
 	} axiom;
 	struct Rule {
 		int symbol_index = 0;
-		char condition[text_size] = "1.0";
+		char condition[text_size] = "0.0";
 		FIELD_STATE condition_state = FIELD_STATE::FALSE;
 		char text[text_size] = "";
 		Plant plant{};
@@ -85,4 +88,10 @@ std::string generate_lstring(Lsystem &lsystem);
 
 // TODO: convert a plant into an lstring
 std::string assemble_lstring_part(Plant &plant);
+
+// save a rule in the $PROJ_ROOT/save folder
+bool save_rule_as_file(Lsystem::Rule &rule, const std::string &save_file_name);
+
+bool load_rule_from_file(Lsystem::Rule &rule, std::string &save_file_name);
+std::optional<std::vector<std::string>> scan_saves();
 } // namespace lsystem

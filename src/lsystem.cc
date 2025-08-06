@@ -48,10 +48,13 @@ void _turtle_action(Plant &plant, Lsystem &lsystem, const char c,
 			x = lsystem.standard_length;
 		}
 
-		Vec2 *last_node = turtle.node;
-		Vec2 *new_node = plant.add_node(_calculate_move(turtle, x));
-		turtle.node = new_node;
-    plant.branches.push_back(Branch{last_node, new_node, c, visable, 1.0});
+		// check nodes limit
+		if (plant.node_counter < plant.MAX_NODES) {
+			Vec2 *last_node = turtle.node;
+			Vec2 *new_node = plant.add_node(_calculate_move(turtle, x));
+			turtle.node = new_node;
+    	plant.branches.push_back(Branch{last_node, new_node, c, visable, 1.0});
+		}
 	}
 
 	// turn turtle counter-clockwise
@@ -308,4 +311,104 @@ std::string generate_lstring(Lsystem &lsystem) {
 }
 
 std::string assemble_lstring_part(Plant &plant);
+
+// each line is one text field
+bool save_rule_as_file(Lsystem::Rule &rule, const std::string &save_file_name) {
+	namespace fs = std::filesystem;
+  fs::path p = fs::current_path();
+	std::string root_path = p;
+	std::string save_path = root_path + "/saves/";
+	std::string full_path = save_path + save_file_name;
+	// std::ofstream file_out(save_path);
+		
+	// file_out << rule.condition << std::endl;
+	// file_out << rule.text << std::endl;
+
+	// std::cout << save_path << std::endl << std::flush;
+	// std::cout << "fuckoff" << std::endl << std::flush;
+	FILE* fp = std::fopen(full_path.c_str(), "w");
+	if (!fp) {
+		std::puts("I/O error when writing");
+		return false;
+	}
+
+  if (std::fwrite(rule.condition, sizeof(rule.condition[0]), 512, fp) < 512) {
+		return false;
+	}
+	if (std::fwrite(rule.text, sizeof(rule.text[0]), 512, fp) < 512) {
+		return false;
+	}
+
+
+	// if (fprintf(fp, "%s\n%s\n", rule.condition, rule.text) < 0) {
+	// 	std::perror("fprintf");
+	// 	return false;
+	// }
+	// if (fputs(rule.condition, fp) == EOF) {
+	// 	return false;
+	// }
+	// if (fputs(rule.text, fp) == EOF) {
+	// 	return false;
+	// }
+
+	std::fclose(fp);
+	return true;
+}
+
+// scan save directory on startup and build gui drop down from it
+// the moment one is selected it is loaded
+
+bool load_rule_from_file(Lsystem::Rule &rule, std::string &save_file_name) {
+	namespace fs = std::filesystem;
+  fs::path p = fs::current_path();
+	std::string root_path = p;
+	std::string save_path = root_path + "/saves/";
+	std::string full_path = save_path + save_file_name;
+	std::ifstream file_in(full_path);
+	fmt::print("relative_path: {}", p.relative_path().c_str());
+		
+
+	FILE* fp = std::fopen(full_path.c_str(), "r");
+	if (!fp) {
+		std::puts("I/O error when reading");
+		return false;
+	}
+
+
+  if (std::fread(&rule.condition[0], sizeof(rule.condition[0]), 512, fp) < 512) {
+		return false;
+	}
+
+  if (std::fread(&rule.text[0], sizeof(rule.text[0]), 512, fp) < 512) {
+		return false;
+	}
+
+	std::fclose(fp);
+	return true;
+
+
+}
+
+
+std::optional<std::vector<std::string>> scan_saves() {
+	namespace fs = std::filesystem;
+  fs::path p = fs::current_path();
+	std::string root_path = p;
+	std::string save_path = root_path + "/saves";
+
+	std::vector<std::string> names;
+	if (fs::exists(save_path) && fs::is_directory(save_path)) {
+			for (auto const& entry : fs::directory_iterator(save_path)) {
+					if (entry.is_regular_file()) {
+							names.push_back(entry.path().filename().string());
+					}
+			}
+	}
+	std::sort(names.begin(), names.end());
+	if (names.size() > 0) {
+		return names;
+	} else {
+		return {};
+	}
+}
 } // namespace lsystem

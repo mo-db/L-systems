@@ -22,6 +22,7 @@
 #include <fstream>
 #include <string>
 #include <sstream>
+#include <filesystem>
 
 // debugging
 #include <cassert>

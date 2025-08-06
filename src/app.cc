@@ -25,6 +25,9 @@ void init(App &app, int width, int height) {
       app.video.width, app.video.height);
   assert(app.video.window_texture);
 
+	app.context.exec_path = SDL_GetBasePath();
+	app.context.save_path = app.context.exec_path + "../../saves/";
+
 	// init ImGui
 	IMGUI_CHECKVERSION();
 	ImGui::CreateContext();
@@ -156,12 +159,12 @@ void update_gui(App &app, Modules &modules) {
     ImGui::End();
   }
 
-  // axiom - rules window
+  // ___LSYSTEM_MAIN___
   static bool open = true;
   bool *p_open = &open;
   if (app.gui.show_window_c) {
 
-    // boilderplate
+    // ___MENU_BAR___
     ImGui::SetNextWindowSize(ImVec2(500, 440), ImGuiCond_FirstUseEver);
     if (ImGui::Begin("Example: Simple layout", p_open,
                      ImGuiWindowFlags_MenuBar)) {
@@ -175,18 +178,57 @@ void update_gui(App &app, Modules &modules) {
         ImGui::EndMenuBar();
       }
 
-      // the axiom
+      // ___AXIOM___
       if (ImGui::TreeNode("Axiom")) {
-        ImGui::InputText("text", lsystem.axiom.text, lsystem.alphabet_size);
+        ImGui::InputText("text", lsystem.axiom.text, lsystem.text_size);
         ImGui::TreePop();
       }
 
-			// all rules
+			// ___RULES___
       for (int i = 0; i < lsystem.max_rules; i++) {
         std::string label = fmt::format("Rule {}", i + 1);
 
         if (ImGui::TreeNode(label.c_str())) {
+					// drop down menu for saved rule selection
+					// gets filled on startup, and if save
 					
+
+					std::vector<std::string> save_file_names;
+					if (auto result = lsystem::scan_saves()) {
+						save_file_names = result.value();
+					}
+
+					// for (auto name : save_file_names) {
+					// 	std::cout << name << " " << std::endl;
+					// }
+					
+          static ImGuiComboFlags flags1 = 0;
+					static int save_fname_index = 0;
+          const char *combo_preview_value1;
+					if (save_file_names.size() > 0) {
+          	combo_preview_value1 = (save_file_names[save_fname_index]).c_str();
+					} else {
+          	combo_preview_value1 = "NIL";
+					}
+          if (ImGui::BeginCombo("files", combo_preview_value1, flags1)) {
+            for (int n = 0; n < (int)save_file_names.size(); n++) {
+              const bool is_selected = (save_fname_index == n);
+              if (ImGui::Selectable(save_file_names[n].c_str(), is_selected)) {
+								// if mouse select this is run
+                save_fname_index = n;
+								fmt::print("selected file: {}\n", save_file_names[n]);
+								assert(lsystem::load_rule_from_file(lsystem.rules[i], save_file_names[save_fname_index]));
+							}
+
+              // Set the initial focus when opening the combo (scrolling +
+              // keyboard navigation focus)
+              if (is_selected)
+                ImGui::SetItemDefaultFocus();
+            }
+            ImGui::EndCombo();
+					}
+
+
 					// drop down menu for symbol selection
           static ImGuiComboFlags flags = 0;
           const char *combo_preview_value =
@@ -205,33 +247,54 @@ void update_gui(App &app, Modules &modules) {
             ImGui::EndCombo();
           }
 
-					// rule condition and text
-
+					// change color based on conditon value
+					int colors_pushed = 0;
 					if (lsystem.rules[i].condition_state == Lsystem::FIELD_STATE::ERROR) {
-						ImGui::PushStyleColor(ImGuiCol_Text, (ImVec4)ImColor::HSV(0.0f, 0.8f, 0.8f));
+						ImGui::PushStyleColor(ImGuiCol_Text, (ImVec4)ImColor::HSV(0.0f, 1.0f, 1.0f));
+						colors_pushed++;
 					} else if (lsystem.rules[i].condition_state == Lsystem::FIELD_STATE::TRUE) {
-						ImGui::PushStyleColor(ImGuiCol_Text, (ImVec4)ImColor::HSV(0.3f, 0.8f, 0.8f));
-					} else {
-					ImGui::PushStyleColor(ImGuiCol_Text, (ImVec4)ImColor::HSV(1.0f, 0.0f, 1.0f));
+						colors_pushed++;
+						ImGui::PushStyleColor(ImGuiCol_Text, (ImVec4)ImColor::HSV(0.3f, 1.0f, 1.0f));
 					}
+
+					// display condition and text
 					ImGui::InputText("condition", lsystem.rules[i].condition,
 													 lsystem.text_size);
-					ImGui::PopStyleColor();
-
-
-
+					if (colors_pushed > 0) {
+						ImGui::PopStyleColor(colors_pushed);
+					}
           ImGui::InputText("text", lsystem.rules[i].text, lsystem.text_size);
 
 					// a button ?
           if (ImGui::Button("Button")) {
-            fmt::print("cond: {}, letter: {}, text {}\n",
-                       lsystem.rules[i].condition,
-                       lsystem.alphabet[lsystem.rules[i].symbol_index],
-                       lsystem.rules[i].text);
+            // fmt::print("cond: {}, letter: {}, text {}\n",
+            //            lsystem.rules[i].condition,
+            //            lsystem.alphabet[lsystem.rules[i].symbol_index],
+            //            lsystem.rules[i].text);
+            //
+						namespace fs = std::filesystem;
+						fs::path p = fs::current_path();
+						std::string root_path = p;
+						fmt::print("relative_path: {}\n", p.relative_path().c_str());
+						fmt::print("root_path: {}\n", p.root_path().c_str());
+						fmt::print("path: {}\n", p.c_str());
           }
+					static char save_file_name[lsystem.text_size] = "";
+          ImGui::InputText("save_file", save_file_name, lsystem.text_size);
+					if (ImGui::Button("Save As")) {
+						fmt::print("save file: {}\n", save_file_name);
+						if (std::strlen(save_file_name) > 0) {
+							assert(lsystem::save_rule_as_file(lsystem.rules[i], save_file_name)); // dont assert
+						}
+					}
+					// overwrite, later ask if overwrite
+					// 	or toogle for overwrite?
           ImGui::TreePop();
         }
       }
+
+
+			ImGui::Text("nodes: %d", modules.lsystem.plant.node_counter);
 
 			// variables
 			ImGui::SliderInt("iterations", &modules.lsystem.iterations, 0, 6);
@@ -271,36 +334,6 @@ void update_gui(App &app, Modules &modules) {
         ImGui::InputText("default", axiom, 32);
         ImGui::EndChild();
       }
-
-      // Right
-      // {
-      // 		ImGui::BeginGroup();
-      // 		ImGui::BeginChild("item view", ImVec2(0,
-      // -ImGui::GetFrameHeightWithSpacing())); // Leave room for 1 line below
-      // us 		ImGui::Text("MyObject: %d", selected);
-      // ImGui::Separator(); 		if (ImGui::BeginTabBar("##Tabs",
-      // ImGuiTabBarFlags_None))
-      // 		{
-      // 				if (ImGui::BeginTabItem("Description"))
-      // 				{
-      // 						ImGui::TextWrapped("Lorem
-      // ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod
-      // tempor incididunt ut labore et dolore magna aliqua. ");
-      // 						ImGui::EndTabItem();
-      // 				}
-      // 				if (ImGui::BeginTabItem("Details"))
-      // 				{
-      // 						ImGui::Text("ID:
-      // 0123456789"); ImGui::EndTabItem();
-      // 				}
-      // 				ImGui::EndTabBar();
-      // 		}
-      // 		ImGui::EndChild();
-      // 		if (ImGui::Button("Revert")) {}
-      // 		ImGui::SameLine();
-      // 		if (ImGui::Button("Save")) {}
-      // 		ImGui::EndGroup();
-      // }
     }
     ImGui::End();
   }

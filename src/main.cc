@@ -5,9 +5,16 @@
 #include "modules.hpp"
 
 // store lines in main? vector<line>
-int main() {
+int main(int argc, char *argv[]) {
 	App app;
 	app::init(app, 960, 540);
+
+	fmt::print("path: {}\n", SDL_GetBasePath());
+	// int cnt = argc + 1;
+	// char *cp;
+	// while ((cp = argv[cnt++]) != nullptr) {
+	// 	fmt::print("path: {}\n", cp);
+	// }
 
 	app.gui.clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 	app.gui.show_window_a = true;
@@ -31,16 +38,16 @@ int main() {
 
 		// calculate the lstring, every 30 frames
 		if (accum == 0) {
-			complete_lstring = lsystem::generate_lstring(modules.lsystem);
-			complete_plant = lsystem::generate_plant(modules.lsystem, Vec2{(double)app.video.width * 0.7, (double)app.video.height - 100.0},
-					complete_lstring);
+			lsystem.lstring = lsystem::generate_lstring(modules.lsystem);
+			lsystem.plant = lsystem::generate_plant(modules.lsystem, Vec2{(double)app.video.width * 0.7, (double)app.video.height - 100.0},
+					lsystem.lstring);
 		}
 
 		// draw the plants
 		for (auto &branch : axiom_plant.branches) {
 			draw::line(app, {*(branch.n1), *(branch.n2)}, color::fg, 0.0);
 		}
-		for (auto &branch : complete_plant.branches) {
+		for (auto &branch : lsystem.plant.branches) {
 			draw::line(app, {*(branch.n1), *(branch.n2)}, color::fg, 0.0);
 		}
 
