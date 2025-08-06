@@ -3,18 +3,22 @@
 
 namespace lsystem {
 
+// get the expression between ()
 // iter must be on (, if > 0 iter will return on )
 // int -> how much to increment the iter after done, if 0, bracket didnt close
 int _get_expr_string(const std::string &in_string, std::string &expr_string, int iter) {
+	fmt::print("iter: {}\n", iter);
 	if (in_string[iter] == '(') {
 		iter++;
 	} else {
 		return 0;
 	}
+	fmt::print("iter: {}\n", iter);
 	bool bracket_closes;
 	while ((bracket_closes = (iter < (int)in_string.size())) && in_string[iter] != ')') {
 		expr_string += in_string[iter++];
 	}
+	fmt::print("iter: {}\n", iter);
 	if (bracket_closes) {
 		return iter;
 	} else {
@@ -145,16 +149,20 @@ std::optional<double> _eval_expr(std::string &expr_string, Lsystem &lsystem, con
 	T x = T(in_x);
 	// T y = T(in_y);
 	// T z = T(in_z);
-	T l = T(lsystem.vars.l);
-	T m = T(lsystem.vars.m);
+	T l = T(lsystem.parameters[0]);
+	T m = T(lsystem.parameters[1]);
+	T n = T(lsystem.parameters[2]);
+	T o = T(lsystem.parameters[3]);
 	// all others
 
 	symbol_table_t symbol_table;
 	symbol_table.add_variable("x",x);
 	// symbol_table.add_variable("y",y);
 	// symbol_table.add_variable("z",z);
-	symbol_table.add_variable("m",m);
 	symbol_table.add_variable("l",l);
+	symbol_table.add_variable("m",m);
+	symbol_table.add_variable("n",n);
+	symbol_table.add_variable("o",o);
 
 	expression_t expr;
 	expr.register_symbol_table(symbol_table);
@@ -211,8 +219,11 @@ std::string _maybe_apply_rule(Lsystem &lsystem, const char symbol, const double 
 					char c = text[index];
 					// check if c needs to be expanded
 					if (c == '(') {
+						return_str += c; // add '(' to string
 						std::string expr_string = "";
+						// return expr_string and increase index by the size of expression
 						int expr_index = _get_expr_string(text, expr_string, index);
+						fmt::print("expression index inc {}\n", expr_index - index);
 						// check if bracked_closed, if then increment index and return
 						if (expr_index > 0) {
 							// expr_string valid
@@ -225,6 +236,7 @@ std::string _maybe_apply_rule(Lsystem &lsystem, const char symbol, const double 
 							}
 							return_str += fmt::format("{}", expr_value);
 							index = expr_index;
+							return_str += text[index]; // add ')' to string
 							index++;
 							// if it didnt close add c and return
 						} else {
@@ -250,6 +262,21 @@ std::string _maybe_apply_rule(Lsystem &lsystem, const char symbol, const double 
 	} else {
 		return fmt::format("{}", symbol);
 	}
+}
+
+// execute this on parameter text change
+ExitState eval_parameters(Lsystem &lsystem) {
+	for (int i = 0; i < lsystem.n_parameters; i++) {
+		std::string parameter_string = lsystem.parameter_strings[i];
+		auto result = _eval_expr(parameter_string, lsystem, 0.0);
+		if (result) {
+			lsystem.parameters[i] = result.value();
+		} else {
+			std::puts("eval_parameters() fail");
+			return ExitState::FAIL;
+		}
+	}
+	return ExitState::SUCCESS;
 }
 
 std::string generate_lstring(Lsystem &lsystem) {

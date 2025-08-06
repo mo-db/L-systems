@@ -37,13 +37,32 @@ struct Plant {
 struct Lsystem {
 	int iterations = 0;
 	float standard_length = 50.0;
-	float standard_angle = gk::pi / 6.0;
+	float standard_angle = gk::pi / 2.05;
 	static constexpr int alphabet_size = 6;
 	static constexpr int text_size = 512;
 	static constexpr int max_rules = 3;
-	struct Vars {
-		double l{}, m{}, n{}, o{}, p{}, q{}, r{}, s{}, t{}, u{}, v{}, w{};
-	} vars;
+
+	// let parameters be text fields that can be evaluated
+	// default value of text field must be 0.0
+	// textfield parameters refer to each other hirarchical to evaluate
+
+	// maybe use std::pair<> for this? instead of a char* array??
+	
+	// indexes: 0 = l, 1 = m, 2 = n ...
+	
+	// std::pair<char, char[text_size]> 
+
+
+	static constexpr int n_parameters = 4;
+	char parameter_strings[n_parameters][text_size] = { "0.0", "0.0", "0.0", "0.0" };
+
+	// store parameters in an array and just as user experiance have letters
+
+	std::array<double, n_parameters> parameters;
+
+	// struct Parameters {
+	// 	double l{}, m{}, n{}, o{}, p{}, q{}, r{}, s{}, t{}, u{}, v{}, w{};
+	// } parameters;
 
 	Plant plant{};
 	std::string lstring = "";
@@ -82,13 +101,18 @@ Plant generate_plant(Lsystem &lsystem, const Vec2 start,
 
 // generate the complete lstring from axiom and rules
 std::optional<double> _eval_expr(std::string &expr_string, Lsystem &lsystem, const double in_x);
-
 std::string _maybe_apply_rule(Lsystem &lsystem, const char symbol,
                               const double *x_in);
 std::string generate_lstring(Lsystem &lsystem);
 
 // TODO: convert a plant into an lstring
-std::string assemble_lstring_part(Plant &plant);
+// std::string assemble_lstring_part(Plant &plant);
+
+
+
+ExitState eval_parameters(Lsystem &lsystem);
+
+
 
 // save a rule in the $PROJ_ROOT/save folder
 ExitState save_rule_as_file(Lsystem::Rule &rule, const std::string &save_file_name);

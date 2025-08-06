@@ -37,6 +37,10 @@ int main(int argc, char *argv[]) {
 
 		// calculate the lstring, every 30 frames
 		if (accum == 0) {
+			// the following should instead trigger if some parameter text changes
+			// do something with the result?
+			auto result = lsystem::eval_parameters(lsystem);
+
 			lsystem.lstring = lsystem::generate_lstring(modules.lsystem);
 			lsystem.plant = lsystem::generate_plant(modules.lsystem, Vec2{(double)app::video.width * 0.7, (double)app::video.height - 100.0},
 					lsystem.lstring);
@@ -187,6 +191,15 @@ ExitState update_gui(Modules &modules) {
         ImGui::EndMenuBar();
       }
 
+      // __PARAMETERS___
+      if (ImGui::TreeNode("Parameters")) {
+				for (int i = 0; i < lsystem.n_parameters; i++) {
+					std::string label = fmt::format("Parameter {}\n", i);
+        	ImGui::InputText(label.c_str(), lsystem.parameter_strings[i], lsystem.text_size);
+				}
+        ImGui::TreePop();
+      }
+
       // ___AXIOM___
       if (ImGui::TreeNode("Axiom")) {
         ImGui::InputText("text", lsystem.axiom.text, lsystem.text_size);
@@ -199,6 +212,7 @@ ExitState update_gui(Modules &modules) {
 
         if (ImGui::TreeNode(label.c_str())) {
 
+					// TODO i should instead save and restore all text fields in file
 					// ___SAVE_FILES_COMBO___
 					std::vector<std::string> save_file_names;
 					if (auto result = lsystem::scan_saves()) {
@@ -257,12 +271,15 @@ ExitState update_gui(Modules &modules) {
 					// change color based on conditon value
 					int colors_pushed = 0;
 					if (lsystem.rules[i].condition_state == Lsystem::FIELD_STATE::ERROR) {
+						std::puts("condition error");
 						ImGui::PushStyleColor(ImGuiCol_Text, (ImVec4)ImColor::HSV(0.0f, 1.0f, 1.0f));
 						colors_pushed++;
 					} else if (lsystem.rules[i].condition_state == Lsystem::FIELD_STATE::TRUE) {
+						std::puts("condition true");
 						colors_pushed++;
 						ImGui::PushStyleColor(ImGuiCol_Text, (ImVec4)ImColor::HSV(0.3f, 1.0f, 1.0f));
 					}
+
 
 					// display condition and text
 					ImGui::InputText("condition", lsystem.rules[i].condition,
@@ -314,7 +331,8 @@ ExitState update_gui(Modules &modules) {
 
 			// variables
 			ImGui::SliderInt("iterations", &modules.lsystem.iterations, 0, 6);
-			ImGui::SliderFloat("float", &modules.lsystem.standard_length, 0.0, 100.0);
+			ImGui::SliderFloat("length", &modules.lsystem.standard_length, 0.0, 100.0);
+			ImGui::SliderFloat("angle", &modules.lsystem.standard_angle, 0.0, gk::pi * 2.0);
 
       enum class Selected {
         NONE,
