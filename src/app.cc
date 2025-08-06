@@ -1,39 +1,39 @@
 #include "app.hpp"
 
 namespace app {
-void init(App &app, int width, int height) {
+void init(int width, int height) {
 
 	// init SDL3
   assert(SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMEPAD));
-  app.video.window = NULL;
-  app.video.renderer = NULL;
+	app::video.window = NULL;
+	app::video.renderer = NULL;
   SDL_WindowFlags window_flags = SDL_WINDOW_RESIZABLE |
                                  SDL_WINDOW_HIGH_PIXEL_DENSITY |
                                  SDL_WINDOW_MOUSE_CAPTURE;
 
   assert(SDL_CreateWindowAndRenderer(
       "main", (width), (height),
-      window_flags, &app.video.window, &app.video.renderer));
-  SDL_SetRenderVSync(app.video.renderer, 1);
-  SDL_SetWindowPosition(app.video.window, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED);
-	SDL_GetRenderOutputSize(app.video.renderer, &app.video.width, &app.video.height);
-	app.video.window_scale = SDL_GetWindowDisplayScale(app.video.window);
+      window_flags, &app::video.window, &app::video.renderer));
+  SDL_SetRenderVSync(app::video.renderer, 1);
+  SDL_SetWindowPosition(app::video.window, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED);
+	SDL_GetRenderOutputSize(app::video.renderer, &app::video.width, &app::video.height);
+	app::video.window_scale = SDL_GetWindowDisplayScale(app::video.window);
 
   // texture create with pixels and not window size . retina display scaling
-  app.video.window_texture = SDL_CreateTexture(
-      app.video.renderer, SDL_PIXELFORMAT_XRGB8888, SDL_TEXTUREACCESS_STREAMING,
-      app.video.width, app.video.height);
-  assert(app.video.window_texture);
+  app::video.window_texture = SDL_CreateTexture(
+      app::video.renderer, SDL_PIXELFORMAT_XRGB8888, SDL_TEXTUREACCESS_STREAMING,
+      app::video.width, app::video.height);
+  assert(app::video.window_texture);
 
-	app.context.exec_path = SDL_GetBasePath();
-	app.context.save_path = app.context.exec_path + "../../saves/";
+	app::context.exec_path = SDL_GetBasePath();
+	app::context.save_path = app::context.exec_path + "../../saves/";
 
 	// init ImGui
 	IMGUI_CHECKVERSION();
 	ImGui::CreateContext();
-	app.gui.io = &ImGui::GetIO();
-	app.gui.io->ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
-	app.gui.io->ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;      // Enable Gamepad Controls
+	app::gui.io = &ImGui::GetIO();
+	app::gui.io->ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
+	app::gui.io->ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;      // Enable Gamepad Controls
 
 	// Setup Dear ImGui style
 	ImGui::StyleColorsDark();
@@ -43,31 +43,31 @@ void init(App &app, int width, int height) {
 	// Had to change scaling mode in imgui sdlrenderer3 backend
 	// -> SDL_SetTextureScaleMode(bd->FontTexture, SDL_SCALEMODE_NEAREST);
 	ImGuiStyle& style = ImGui::GetStyle();
-	app.gui.io->FontGlobalScale = 0.5f;
-	style.ScaleAllSizes(app.video.window_scale);
+	app::gui.io->FontGlobalScale = 0.5f;
+	style.ScaleAllSizes(app::video.window_scale);
 
-	app.gui.io->Fonts->AddFontFromFileTTF("/Users/moritz/Library/Fonts/IosevkaFixedSS14-Oblique.ttf", 30.0f);
+	app::gui.io->Fonts->AddFontFromFileTTF("/Users/moritz/Library/Fonts/IosevkaFixedSS14-Oblique.ttf", 30.0f);
 
 	// Setup Platform/Renderer backends
-	ImGui_ImplSDL3_InitForSDLRenderer(app.video.window, app.video.renderer);
-	ImGui_ImplSDLRenderer3_Init(app.video.renderer);
+	ImGui_ImplSDL3_InitForSDLRenderer(app::video.window, app::video.renderer);
+	ImGui_ImplSDLRenderer3_Init(app::video.renderer);
 }
 
 
 // could return vector of key presses, maybe pairs of key and state
-void process_events(App &app) {
+void process_events() {
   SDL_Event event;
   while (SDL_PollEvent(&event)) {
 		ImGui_ImplSDL3_ProcessEvent(&event);
 
 		if (event.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED &&
-				event.window.windowID == SDL_GetWindowID(app.video.window)) {
-      app.context.keep_running = false;
+				event.window.windowID == SDL_GetWindowID(app::video.window)) {
+      app::context.keep_running = false;
 		}
 
     switch (event.type) {
     case SDL_EVENT_QUIT:
-      app.context.keep_running = false;
+      app::context.keep_running = false;
       break;
 
 		case SDL_EVENT_WINDOW_CLOSE_REQUESTED:
@@ -76,12 +76,12 @@ void process_events(App &app) {
 			switch(event.key.key) {
 				case SDLK_LSHIFT:
 					if (!event.key.repeat) {
-						app.input.shift_set = false;
+						app::input.shift_set = false;
 					}
 					break;
 				case SDLK_LCTRL:
 					if (!event.key.repeat) {
-						app.input.ctrl_set = false;
+						app::input.ctrl_set = false;
 					}
 					break;
 				default: break;
@@ -92,12 +92,12 @@ void process_events(App &app) {
 			switch(event.key.key) {
 				case SDLK_LSHIFT:
 					if (!event.key.repeat) {
-						app.input.shift_set = true;
+						app::input.shift_set = true;
 					}
 					break;
 				case SDLK_LCTRL:
 					if (!event.key.repeat) {
-						app.input.ctrl_set = true;
+						app::input.ctrl_set = true;
 					}
 					break;
         case SDLK_ESCAPE:
@@ -107,26 +107,26 @@ void process_events(App &app) {
 			break;
 
      case SDL_EVENT_MOUSE_MOTION:
-			if (!app.gui.io->WantCaptureMouse) {
-				app.input.mouse.x = round(event.motion.x * app.video.window_scale);
-				app.input.mouse.y = round(event.motion.y * app.video.window_scale);
+			if (!app::gui.io->WantCaptureMouse) {
+				app::input.mouse.x = round(event.motion.x * app::video.window_scale);
+				app::input.mouse.y = round(event.motion.y * app::video.window_scale);
 			}
       break;
 
     case SDL_EVENT_MOUSE_BUTTON_DOWN:
-      app.input.mouse_left_down = event.button.down;
-			app.input.mouse_click = true;
+      app::input.mouse_left_down = event.button.down;
+			app::input.mouse_click = true;
       break;
 
     case SDL_EVENT_MOUSE_BUTTON_UP:
-      app.input.mouse_left_down = event.button.down;
+      app::input.mouse_left_down = event.button.down;
       break;
 
 		default: break;
 		}
 	}
 }
-void update_gui(App &app, Modules &modules) {
+void update_gui(Modules &modules) {
   auto &lsystem = modules.lsystem;
 
   ImGui_ImplSDLRenderer3_NewFrame();
@@ -134,18 +134,18 @@ void update_gui(App &app, Modules &modules) {
   ImGui::NewFrame();
 
   // window_a
-  if (app.gui.show_window_a) {
-    ImGui::ShowDemoWindow(&app.gui.show_window_a);
+  if (app::gui.show_window_a) {
+    ImGui::ShowDemoWindow(&app::gui.show_window_a);
   }
 
   // window_b
-  if (app.gui.show_window_b) {
+  if (app::gui.show_window_b) {
     static int counter = 0;
 
     ImGui::Begin("Hello, world!");
     ImGui::Text("This is some useful text.");
-    ImGui::Checkbox("Demo Window", &app.gui.show_window_a);
-    ImGui::Checkbox("Another Window", &app.gui.show_window_b);
+    ImGui::Checkbox("Demo Window", &app::gui.show_window_a);
+    ImGui::Checkbox("Another Window", &app::gui.show_window_b);
 
     ImGui::SliderInt("iterations", &modules.lsystem.iterations, 0, 6);
     ImGui::SliderFloat("float", &modules.lsystem.standard_length, 0.0, 100.0);
@@ -155,14 +155,14 @@ void update_gui(App &app, Modules &modules) {
     ImGui::SameLine();
     ImGui::Text("counter = %d", counter);
     ImGui::Text("Application average %.3f ms/frame (%.1f FPS)",
-                1000.0f / app.gui.io->Framerate, app.gui.io->Framerate);
+                1000.0f / app::gui.io->Framerate, app::gui.io->Framerate);
     ImGui::End();
   }
 
   // ___LSYSTEM_MAIN___
   static bool open = true;
   bool *p_open = &open;
-  if (app.gui.show_window_c) {
+  if (app::gui.show_window_c) {
 
     // ___MENU_BAR___
     ImGui::SetNextWindowSize(ImVec2(500, 440), ImGuiCond_FirstUseEver);
@@ -339,35 +339,35 @@ void update_gui(App &app, Modules &modules) {
   }
 }
 
-void lock_frame_buf(App &app) {
-  assert(SDL_LockTexture(app.video.window_texture, NULL,
-                         reinterpret_cast<void **>(&app.video.frame_buf),
-                         &app.video.pitch));
-  std::fill_n(app.video.frame_buf, app.video.width * app.video.height,
+void lock_frame_buf() {
+  assert(SDL_LockTexture(app::video.window_texture, NULL,
+                         reinterpret_cast<void **>(&app::video.frame_buf),
+                         &app::video.pitch));
+  std::fill_n(app::video.frame_buf, app::video.width * app::video.height,
               color::bg);
 }
 
-void render(App &app) {
-  SDL_UnlockTexture(app.video.window_texture);
-  SDL_RenderTexture(app.video.renderer, app.video.window_texture, NULL, NULL);
-  app.video.frame_buf = nullptr;
-  app.video.pitch = 0;
+void render() {
+  SDL_UnlockTexture(app::video.window_texture);
+  SDL_RenderTexture(app::video.renderer, app::video.window_texture, NULL, NULL);
+  app::video.frame_buf = nullptr;
+  app::video.pitch = 0;
 
   ImGui::Render();
-  SDL_SetRenderScale(app.video.renderer, app.gui.io->DisplayFramebufferScale.x,
-                     app.gui.io->DisplayFramebufferScale.y);
+  SDL_SetRenderScale(app::video.renderer, app::gui.io->DisplayFramebufferScale.x,
+                     app::gui.io->DisplayFramebufferScale.y);
   ImGui_ImplSDLRenderer3_RenderDrawData(ImGui::GetDrawData(),
-                                        app.video.renderer);
-  SDL_RenderPresent(app.video.renderer);
+                                        app::video.renderer);
+  SDL_RenderPresent(app::video.renderer);
 }
 
-void cleanup(App &app) {
+void cleanup() {
   ImGui_ImplSDLRenderer3_Shutdown();
   ImGui_ImplSDL3_Shutdown();
   ImGui::DestroyContext();
 
-  SDL_DestroyRenderer(app.video.renderer);
-  SDL_DestroyWindow(app.video.window);
+  SDL_DestroyRenderer(app::video.renderer);
+  SDL_DestroyWindow(app::video.window);
   SDL_Quit();
 }
 } // namespace app

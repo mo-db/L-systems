@@ -41,9 +41,9 @@ struct Input {
 };
 
 inline Context context;
-inline Context video;
-inline Context gui;
-inline Context input;
+inline Video video;
+inline Gui gui;
+inline Input input;
 
 void init(int width, int height);
 void process_events();
