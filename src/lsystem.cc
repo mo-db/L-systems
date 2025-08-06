@@ -1,4 +1,5 @@
 #include "lsystem.hpp"
+#include "core.hpp"
 
 namespace lsystem {
 
@@ -312,89 +313,72 @@ std::string generate_lstring(Lsystem &lsystem) {
 
 std::string assemble_lstring_part(Plant &plant);
 
-// each line is one text field
-bool save_rule_as_file(Lsystem::Rule &rule, const std::string &save_file_name) {
-	namespace fs = std::filesystem;
-  fs::path p = fs::current_path();
-	std::string root_path = p;
-	std::string save_path = root_path + "/saves/";
-	std::string full_path = save_path + save_file_name;
-	// std::ofstream file_out(save_path);
-		
-	// file_out << rule.condition << std::endl;
-	// file_out << rule.text << std::endl;
 
-	// std::cout << save_path << std::endl << std::flush;
-	// std::cout << "fuckoff" << std::endl << std::flush;
-	FILE* fp = std::fopen(full_path.c_str(), "w");
+ExitState save_rule_as_file(Lsystem::Rule &rule, const std::string &save_file_name) {
+	std::string save_file_full_path = app::context.save_path + '/' + save_file_name;
+
+	fmt::print("save file: {}\n", save_file_full_path);
+
+	FILE* fp = std::fopen(save_file_full_path.c_str(), "w");
 	if (!fp) {
-		std::puts("I/O error when writing");
-		return false;
+		std::puts("std::fopen failed");
+		return ExitState::FAIL;
 	}
 
-  if (std::fwrite(rule.condition, sizeof(rule.condition[0]), 512, fp) < 512) {
-		return false;
+	ExitState exit_state{};
+	constexpr int n_items = app::gui.textfield_size;
+  if (fwrite(rule.condition, sizeof(rule.condition[0]), n_items, fp) != n_items) {
+		exit_state = ExitState::FAIL;
 	}
-	if (std::fwrite(rule.text, sizeof(rule.text[0]), 512, fp) < 512) {
-		return false;
+	if (fwrite(rule.text, sizeof(rule.text[0]), n_items, fp) != n_items) {
+		exit_state = ExitState::FAIL;
 	}
 
+	fclose(fp);
 
-	// if (fprintf(fp, "%s\n%s\n", rule.condition, rule.text) < 0) {
-	// 	std::perror("fprintf");
-	// 	return false;
-	// }
-	// if (fputs(rule.condition, fp) == EOF) {
-	// 	return false;
-	// }
-	// if (fputs(rule.text, fp) == EOF) {
-	// 	return false;
-	// }
-
-	std::fclose(fp);
-	return true;
+	// delete file if frwite() failed
+	if (exit_state != ExitState::SUCCESS) {
+		if (std::remove(save_file_full_path.c_str()) != 0) {
+			ERROR_PRINT("std::remove()");
+			return ExitState::ERROR;
+		}
+	}
+	return exit_state;
 }
 
-// scan save directory on startup and build gui drop down from it
-// the moment one is selected it is loaded
 
-bool load_rule_from_file(Lsystem::Rule &rule, std::string &save_file_name) {
-	namespace fs = std::filesystem;
-  fs::path p = fs::current_path();
-	std::string root_path = p;
-	std::string save_path = root_path + "/saves/";
-	std::string full_path = save_path + save_file_name;
-	std::ifstream file_in(full_path);
-	fmt::print("relative_path: {}", p.relative_path().c_str());
-		
+ExitState load_rule_from_file(Lsystem::Rule &rule, std::string &save_file_name) {
+	std::string save_file = app::context.save_path + '/' + save_file_name;
 
-	FILE* fp = std::fopen(full_path.c_str(), "r");
+	FILE* fp = std::fopen(save_file.c_str(), "r");
 	if (!fp) {
-		std::puts("I/O error when reading");
-		return false;
+		std::puts("std::fopen failed");
+		return ExitState::FAIL;
 	}
 
-
-  if (std::fread(&rule.condition[0], sizeof(rule.condition[0]), 512, fp) < 512) {
-		return false;
+	constexpr int n_items = app::gui.textfield_size;
+	char temp_buf[n_items];
+  if (std::fread(temp_buf, sizeof(temp_buf[0]), n_items, fp) == n_items) {
+		std::memcpy(rule.condition, temp_buf, n_items * sizeof(temp_buf[0]));
+	} else {
+		std::fclose(fp);
+		return ExitState::FAIL;
 	}
-
-  if (std::fread(&rule.text[0], sizeof(rule.text[0]), 512, fp) < 512) {
-		return false;
-	}
+  if (std::fread(temp_buf, sizeof(temp_buf[0]), n_items, fp) == n_items) {
+		std::memcpy(rule.text, temp_buf, n_items * sizeof(temp_buf[0]));
+	} else {
+		std::fclose(fp);
+		return ExitState::FAIL;
+}
 
 	std::fclose(fp);
-	return true;
-
-
+	return ExitState::SUCCESS;
 }
 
 
 std::optional<std::vector<std::string>> scan_saves() {
 	namespace fs = std::filesystem;
-  fs::path p = fs::current_path();
-	std::string root_path = p;
-	std::string save_path = root_path + "/saves";
+	std::string save_path = app::context.save_path;
 
 	std::vector<std::string> names;
 	if (fs::exists(save_path) && fs::is_directory(save_path)) {

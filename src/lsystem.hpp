@@ -1,6 +1,7 @@
 // lsystem.hpp
 #pragma once
 #include "core.hpp"
+#include "app.hpp"
 #include "graphics.hpp"
 
 struct Branch {
@@ -90,8 +91,8 @@ std::string generate_lstring(Lsystem &lsystem);
 std::string assemble_lstring_part(Plant &plant);
 
 // save a rule in the $PROJ_ROOT/save folder
-bool save_rule_as_file(Lsystem::Rule &rule, const std::string &save_file_name);
+ExitState save_rule_as_file(Lsystem::Rule &rule, const std::string &save_file_name);
 
-bool load_rule_from_file(Lsystem::Rule &rule, std::string &save_file_name);
+ExitState load_rule_from_file(Lsystem::Rule &rule, std::string &save_file_name);
 std::optional<std::vector<std::string>> scan_saves();
 } // namespace lsystem

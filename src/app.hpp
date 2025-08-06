@@ -1,7 +1,6 @@
 // app.hpp
 #pragma once
 #include "core.hpp"
-#include "modules.hpp"
 #include "graphics.hpp"
 
 namespace app {
@@ -24,6 +23,7 @@ struct Video {
 
 struct Gui {
 	ImGuiIO *io = nullptr;
+	static constexpr int textfield_size = 512;
 	ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 	// windows
 	bool show_window_a = false;
@@ -46,9 +46,4 @@ inline Gui gui;
 inline Input input;
 
 void init(int width, int height);
-void process_events();
-void lock_frame_buf();
-void update_gui(Modules &modules);
-void render();
-void cleanup();
 } // namespace app
