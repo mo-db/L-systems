@@ -307,7 +307,7 @@ ExitState update_gui(Modules &modules) {
           }
 
           // ___SAVE_RULE___
-					static char save_file_name[lsystem.text_size] = "";
+					static char save_file_name[512] = "";
           ImGui::InputText("save_file", save_file_name, lsystem.text_size);
 					if (ImGui::Button("Save As")) {
 						// fmt::print("save file: {}\n", save_file_name);
