@@ -3,27 +3,27 @@
 
 namespace lsystem {
 
-// get the expression between ()
-// iter must be on (, if > 0 iter will return on )
-// int -> how much to increment the iter after done, if 0, bracket didnt close
-int _get_expr_string(const std::string &in_string, std::string &expr_string, int iter) {
-	fmt::print("iter: {}\n", iter);
-	if (in_string[iter] == '(') {
-		iter++;
-	} else {
-		return 0;
-	}
-	fmt::print("iter: {}\n", iter);
-	bool bracket_closes;
-	while ((bracket_closes = (iter < (int)in_string.size())) && in_string[iter] != ')') {
-		expr_string += in_string[iter++];
-	}
-	fmt::print("iter: {}\n", iter);
-	if (bracket_closes) {
-		return iter;
-	} else {
-		return 0;
-	}
+// returns string between brackets, index must sit on '('
+std::optional<std::string> _get_string_between_brackets(std::string in_string, const int index) {
+	assert(in_string[index] == '(');
+
+	// set offset_index to the first char of the string
+	int offset_index = index + 1;	
+	std::string expr_string = "";
+
+	// fill expr_string
+  bool bracket_closes;
+  while ((bracket_closes = (offset_index < (int)in_string.size())) &&
+         in_string[offset_index] != ')') {
+    expr_string += in_string[offset_index++];
+  }
+
+	// only return expr_string if there was a closing bracket
+  if (bracket_closes) {
+    return expr_string;
+  } else {
+		return {};
+  }
 }
 
 Vec2 _calculate_move(Turtle &turtle, const double length) {
@@ -59,6 +59,8 @@ void _turtle_action(Plant &plant, Lsystem &lsystem, const char c,
 			Vec2 *new_node = plant.add_node(_calculate_move(turtle, x));
 			turtle.node = new_node;
     	plant.branches.push_back(Branch{last_node, new_node, c, visable, 1.0});
+		} else {
+			std::puts("node limit reached");
 		}
 	}
 
@@ -110,13 +112,10 @@ Plant generate_plant(Lsystem &lsystem, const Vec2 start, const std::string lstri
 			if (index + 1 < (int)lstring.size()) {
 
 				if (lstring[index + 1] == '(') {
-					std::string expr_string = "";
-					int expr_index = _get_expr_string(lstring, expr_string, index + 1);
-					if (expr_index > 0) {
-						index = expr_index;
-						// expr_string valid, do stuff here
-						double value = atof(expr_string.c_str());
-						_turtle_action(plant, lsystem, c, &value);
+					if (auto result = _get_string_between_brackets(lstring, index + 1)) {
+						std::string expr_string = result.value();
+						double expr_value = atof(expr_string.c_str());
+						_turtle_action(plant, lsystem, c, &expr_value);
 						index++;
 					} else {
 						_turtle_action(plant, lsystem, c, nullptr);
@@ -177,10 +176,10 @@ std::optional<double> _eval_expr(std::string &expr_string, Lsystem &lsystem, con
 }
 
 
-
+// cannot fail
 std::string _maybe_apply_rule(Lsystem &lsystem, const char symbol, const double *x_in) {
 	// if no value specified in braces, set fitting default
-	double x{}; //, y{}, z{};
+	double x{};
 	if (x_in) {
 		x = *x_in;	
 	} else {
@@ -200,58 +199,54 @@ std::string _maybe_apply_rule(Lsystem &lsystem, const char symbol, const double 
 		// if there is a rule with fitting symbol, check if condition is true
 		if (rule_symbol == symbol) {
 
-			// call function with expected<>
-			auto result = _eval_expr(condition, lsystem, x);
-			if (!result) {
-				rule.condition_state = Lsystem::FIELD_STATE::ERROR;
-			} else if (util::equal_epsilon(result.value(), 1.0)) {
-				rule.condition_state = Lsystem::FIELD_STATE::TRUE;
+			// eval condition, and update FIELD_STATE based on outcome
+			if (auto result = _eval_expr(condition, lsystem, x)) {
+				if (util::equal_epsilon(result.value(), 1.0)) {
+					rule.condition_state = Lsystem::FIELD_STATE::TRUE;
+				} else {
+					rule.condition_state = Lsystem::FIELD_STATE::FALSE;
+				}
 			} else {
-				rule.condition_state = Lsystem::FIELD_STATE::FALSE;
+				rule.condition_state = Lsystem::FIELD_STATE::ERROR;
 			}
 
+			// if condition is met, substitute rule for symbol, try eval all expr
 			if (rule.condition_state == Lsystem::FIELD_STATE::TRUE) {
 				std::string return_str = "";
 				int index = 0;
 
-				// substitute the symbol for the rule, with evaluated expressions
 				while (index < (int)text.size()) {
 					char c = text[index];
-					// check if c needs to be expanded
+					// check if c is expr -> eval
+
 					if (c == '(') {
-						return_str += c; // add '(' to string
-						std::string expr_string = "";
-						// return expr_string and increase index by the size of expression
-						int expr_index = _get_expr_string(text, expr_string, index);
-						fmt::print("expression index inc {}\n", expr_index - index);
-						// check if bracked_closed, if then increment index and return
-						if (expr_index > 0) {
-							// expr_string valid
-							auto result = _eval_expr(expr_string, lsystem, x);
-							double expr_value;
-							if (!result) {
-								expr_value = 0.0;
-							} else {
-								expr_value = result.value();
-							}
+						// if expr_string valid, evaluate and add to return_string
+
+						if (auto result = _get_string_between_brackets(text, index)) {
+							std::string expr_string = result.value();
+							// set to 0.0 if expr cant eval fails
+							double expr_value = 
+								_eval_expr(expr_string, lsystem, x).value_or(0.0);
+							// add the brackets with the evaluated expr_string to return_string
+							return_str += '(';
 							return_str += fmt::format("{}", expr_value);
-							index = expr_index;
-							return_str += text[index]; // add ')' to string
-							index++;
-							// if it didnt close add c and return
+							return_str += ')';
+							// move index to position after closing bracket
+							index += (int)expr_string.size() + 2;
+
+						// expr_string not valid
 						} else {
-							return_str += c;
 							index++;
 						}
 
-						// add c to return string and continue
+					// add c to expr_string and inc index
 					} else {
 						return_str += c;
 						index++;
 					}
-				}
-				return return_str;
+				} // while end
 
+				return return_str;
 			}
 		}
 	}
@@ -265,18 +260,16 @@ std::string _maybe_apply_rule(Lsystem &lsystem, const char symbol, const double 
 }
 
 // execute this on parameter text change
-ExitState eval_parameters(Lsystem &lsystem) {
+bool eval_parameters(Lsystem &lsystem) {
 	for (int i = 0; i < lsystem.n_parameters; i++) {
 		std::string parameter_string = lsystem.parameter_strings[i];
-		auto result = _eval_expr(parameter_string, lsystem, 0.0);
-		if (result) {
+		if (auto result = _eval_expr(parameter_string, lsystem, 0.0)) {
 			lsystem.parameters[i] = result.value();
 		} else {
-			std::puts("eval_parameters() fail");
-			return ExitState::FAIL;
+			return false;
 		}
 	}
-	return ExitState::SUCCESS;
+	return true;
 }
 
 std::string generate_lstring(Lsystem &lsystem) {
@@ -299,23 +292,14 @@ std::string generate_lstring(Lsystem &lsystem) {
 
 					// check if the next character is an open bracket
 					if (lstring[index + 1] == '(') {
-						std::string expr_string = "";
-						int expr_index = _get_expr_string(lstring, expr_string, index+1);
-						if (expr_index > 0) {
-							// expr_string valid, do stuff here
-
-							// evaluate expression to double
-							auto result = _eval_expr(expr_string, lsystem, 0.0);
-							double expr_value;
-							if (!result) {
-								expr_value = 0.0; // dont know if this is enough error detection
-							} else {
-								expr_value = result.value();
-							}
+						if (auto result = _get_string_between_brackets(lstring, index+1)) {
+							std::string expr_string = result.value();
+							double expr_value =
+								_eval_expr(expr_string, lsystem, 0.0).value_or(0.0);
 
 							lstring_expanded += _maybe_apply_rule(lsystem, c, &expr_value);
-							index = expr_index;
-							index++;
+							// move index to position after closing bracket
+							index += (int)expr_string.size() + 3;
 						} else {
 							lstring_expanded += _maybe_apply_rule(lsystem, c, nullptr);
 							index++;
@@ -338,10 +322,8 @@ std::string generate_lstring(Lsystem &lsystem) {
 	return lstring;
 }
 
-std::string assemble_lstring_part(Plant &plant);
-
-
-ExitState save_rule_as_file(Lsystem::Rule &rule, const std::string &save_file_name) {
+// TODO serialize lsystem
+bool save_rule_as_file(Lsystem::Rule &rule, const std::string &save_file_name) {
 	std::string save_file_full_path = app::context.save_path + '/' + save_file_name;
 
 	fmt::print("save file: {}\n", save_file_full_path);
@@ -349,38 +331,36 @@ ExitState save_rule_as_file(Lsystem::Rule &rule, const std::string &save_file_na
 	FILE* fp = std::fopen(save_file_full_path.c_str(), "w");
 	if (!fp) {
 		std::puts("std::fopen failed");
-		return ExitState::FAIL;
+		return false;
 	}
 
-	ExitState exit_state{};
+	bool is_ok = true;
 	constexpr int n_items = app::gui.textfield_size;
   if (fwrite(rule.condition, sizeof(rule.condition[0]), n_items, fp) != n_items) {
-		exit_state = ExitState::FAIL;
+		is_ok = false;
 	}
 	if (fwrite(rule.text, sizeof(rule.text[0]), n_items, fp) != n_items) {
-		exit_state = ExitState::FAIL;
+		is_ok = false;
 	}
 
 	fclose(fp);
 
 	// delete file if frwite() failed
-	if (exit_state != ExitState::SUCCESS) {
-		if (std::remove(save_file_full_path.c_str()) != 0) {
-			ERROR_PRINT("std::remove()");
-			return ExitState::ERROR;
-		}
+	if (!is_ok) {
+		assert(std::remove(save_file_full_path.c_str()) == 0);
 	}
-	return exit_state;
+	return true;
 }
 
 
-ExitState load_rule_from_file(Lsystem::Rule &rule, std::string &save_file_name) {
+// TODO load lsystem from file
+bool load_rule_from_file(Lsystem::Rule &rule, std::string &save_file_name) {
 	std::string save_file = app::context.save_path + '/' + save_file_name;
 
 	FILE* fp = std::fopen(save_file.c_str(), "r");
 	if (!fp) {
 		std::puts("std::fopen failed");
-		return ExitState::FAIL;
+		return false;
 	}
 
 	constexpr int n_items = app::gui.textfield_size;
@@ -389,17 +369,17 @@ ExitState load_rule_from_file(Lsystem::Rule &rule, std::string &save_file_name) 
 		std::memcpy(rule.condition, temp_buf, n_items * sizeof(temp_buf[0]));
 	} else {
 		std::fclose(fp);
-		return ExitState::FAIL;
+		return false;
 	}
   if (std::fread(temp_buf, sizeof(temp_buf[0]), n_items, fp) == n_items) {
 		std::memcpy(rule.text, temp_buf, n_items * sizeof(temp_buf[0]));
 	} else {
 		std::fclose(fp);
-		return ExitState::FAIL;
+		return false;
 }
 
 	std::fclose(fp);
-	return ExitState::SUCCESS;
+	return true;
 }
 
 

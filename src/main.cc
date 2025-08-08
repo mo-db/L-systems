@@ -6,14 +6,13 @@
 
 void process_events();
 void lock_frame_buf();
-ExitState update_gui(Modules &modules);
+bool update_gui(Modules &modules);
 void render();
 void cleanup();
 
 // store lines in main? vector<line>
 int main(int argc, char *argv[]) {
 	app::init(960, 540);
-	ExitState exit_state{};
 
 	app::gui.clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 	app::gui.show_window_a = true;
@@ -22,9 +21,6 @@ int main(int argc, char *argv[]) {
 
 	Modules modules;
 	Lsystem &lsystem = modules.lsystem;
-
-	std::string complete_lstring = "";
-	Plant complete_plant{};
 
 	int accum = 0;
 	while(app::context.keep_running) {
@@ -39,7 +35,9 @@ int main(int argc, char *argv[]) {
 		if (accum == 0) {
 			// the following should instead trigger if some parameter text changes
 			// do something with the result?
-			auto result = lsystem::eval_parameters(lsystem);
+			if (!lsystem::eval_parameters(lsystem)) {
+				puts("eval parameters failed");
+			}
 
 			lsystem.lstring = lsystem::generate_lstring(modules.lsystem);
 			lsystem.plant = lsystem::generate_plant(modules.lsystem, Vec2{(double)app::video.width * 0.7, (double)app::video.height - 100.0},
@@ -54,8 +52,7 @@ int main(int argc, char *argv[]) {
 			draw::line({*(branch.n1), *(branch.n2)}, color::fg, 0.0);
 		}
 
-		exit_state = update_gui(modules);
-		if (exit_state == ExitState::ERROR) {
+		if (!update_gui(modules)) {
 			return 1;
 		}
 
@@ -139,7 +136,7 @@ void process_events() {
 		}
 	}
 }
-ExitState update_gui(Modules &modules) {
+bool update_gui(Modules &modules) {
   auto &lsystem = modules.lsystem;
 
   ImGui_ImplSDLRenderer3_NewFrame();
@@ -214,7 +211,7 @@ ExitState update_gui(Modules &modules) {
 
 					// TODO i should instead save and restore all text fields in file
 					// ___SAVE_FILES_COMBO___
-					std::vector<std::string> save_file_names;
+					static std::vector<std::string> save_file_names;
 					if (auto result = lsystem::scan_saves()) {
 						save_file_names = result.value();
 					}
@@ -234,11 +231,9 @@ ExitState update_gui(Modules &modules) {
               if (ImGui::Selectable(save_file_names[n].c_str(), is_selected)) {
 								// execute if gui drop down field is selected
                 save_fname_index = n;
-								auto exit_state = lsystem::load_rule_from_file(lsystem.rules[i], save_file_names[save_fname_index]);
-								if (exit_state == ExitState::FAIL) {
+								if (!lsystem::load_rule_from_file(lsystem.rules[i],
+											save_file_names[save_fname_index])) {
 									std::puts("fail, rule couldnt be loaded");
-								} else if (exit_state == ExitState::ERROR) {
-									return exit_state;
 								}
 							}
 
@@ -291,37 +286,22 @@ ExitState update_gui(Modules &modules) {
 
 					// a button ?
           if (ImGui::Button("Button")) {
-            // fmt::print("cond: {}, letter: {}, text {}\n",
-            //            lsystem.rules[i].condition,
-            //            lsystem.alphabet[lsystem.rules[i].symbol_index],
-            //            lsystem.rules[i].text);
-            //
-						namespace fs = std::filesystem;
-						fs::path p = fs::current_path();
-						std::string root_path = p;
-						fmt::print("relative_path: {}\n", p.relative_path().c_str());
-						fmt::print("root_path: {}\n", p.root_path().c_str());
-						fmt::print("path: {}\n", p.c_str());
-						fmt::print("base_path: {}\n", app::context.exec_path);
-						fmt::print("save_path: {}\n", app::context.save_path);
+						print_trace();
+						return false;
           }
 
           // ___SAVE_RULE___
-					static char save_file_name[512] = "";
-          ImGui::InputText("save_file", save_file_name, lsystem.text_size);
+					// this works
+					static constexpr int text_size = app::Gui::textfield_size;
+					static char save_file_name[text_size] = ""; // needs be persistant
+          ImGui::InputText("save_file", save_file_name, text_size);
 					if (ImGui::Button("Save As")) {
-						// fmt::print("save file: {}\n", save_file_name);
 						if (std::strlen(save_file_name) > 0) {
-							ExitState exit_state = lsystem::save_rule_as_file(lsystem.rules[i], save_file_name);
-							if (exit_state == ExitState::ERROR) {
-								std::exit(1);
-							} else if (exit_state == ExitState::FAIL) {
+							if (!lsystem::save_rule_as_file(lsystem.rules[i], save_file_name)) {
 								puts("Rule saving failed, no file was created!");
 							}
 						}
 					}
-					// overwrite, later ask if overwrite
-					// 	or toogle for overwrite?
           ImGui::TreePop();
         }
       }
@@ -371,7 +351,7 @@ ExitState update_gui(Modules &modules) {
     }
     ImGui::End();
   }
-	return ExitState::SUCCESS;
+	return true;
 }
 
 void lock_frame_buf() {

@@ -37,25 +37,19 @@
 #include "imgui_impl_sdl3.h"
 #include "imgui_impl_sdlrenderer3.h"
 #include "exprtk.hpp"
+#include "backward.hpp"
 
-#define ERROR_PRINT(msg)                                          \
-    do {                                                          \
-        std::cerr                                                 \
-            << "ERROR: \"" << (msg) << "\", file "                \
-            << __FILE__ << ", line " << __LINE__ << "\n";         \
-    } while (0)
+inline void print_trace() {
+	using namespace backward;
+	StackTrace st; st.load_here(32);
+	Printer p; p.print(st);
+}
 
 namespace gk {
 constexpr double epsilon = 1e-6;
 constexpr double iepsilon = 0.5;
 constexpr double pi = std::numbers::pi;
 } // namespace gk
-
-enum class ExitState {
-	SUCCESS,
-	FAIL,
-	ERROR,
-};
 
 namespace color {
 constexpr uint32_t black =					0x00000000;
