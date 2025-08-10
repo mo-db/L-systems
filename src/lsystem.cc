@@ -57,8 +57,8 @@ void _turtle_action(Plant &plant, Lsystem &lsystem, const char c,
 		if (plant.node_counter < plant.MAX_NODES) {
 			Vec2 *last_node = turtle.node;
 			Vec2 *new_node = plant.add_node(_calculate_move(turtle, x));
-			turtle.node = new_node;
     	plant.branches.push_back(Branch{last_node, new_node, c, visable, 1.0});
+			turtle.node = new_node;
 		} else {
 			std::puts("node limit reached");
 		}
@@ -116,7 +116,7 @@ Plant generate_plant(Lsystem &lsystem, const Vec2 start, const std::string lstri
 						std::string expr_string = result.value();
 						double expr_value = atof(expr_string.c_str());
 						_turtle_action(plant, lsystem, c, &expr_value);
-						index++;
+						index += (int)expr_string.size() + 3;
 					} else {
 						_turtle_action(plant, lsystem, c, nullptr);
 						index++;
@@ -176,7 +176,6 @@ std::optional<double> _eval_expr(std::string &expr_string, Lsystem &lsystem, con
 }
 
 
-// cannot fail
 std::string _maybe_apply_rule(Lsystem &lsystem, const char symbol, const double *x_in) {
 	// if no value specified in braces, set fitting default
 	double x{};
@@ -228,9 +227,7 @@ std::string _maybe_apply_rule(Lsystem &lsystem, const char symbol, const double 
 							double expr_value = 
 								_eval_expr(expr_string, lsystem, x).value_or(0.0);
 							// add the brackets with the evaluated expr_string to return_string
-							return_str += '(';
-							return_str += fmt::format("{}", expr_value);
-							return_str += ')';
+							return_str += fmt::format("({})", expr_value);
 							// move index to position after closing bracket
 							index += (int)expr_string.size() + 2;
 
@@ -288,14 +285,22 @@ std::string generate_lstring(Lsystem &lsystem) {
 			} else {
 
 				// check c is the last character in the string
-				if (index + 1 < (int)lstring.size()) {
+				int index_next = index + 1;
+				if (index_next < (int)lstring.size()) {
 
 					// check if the next character is an open bracket
-					if (lstring[index + 1] == '(') {
-						if (auto result = _get_string_between_brackets(lstring, index+1)) {
+					if (lstring[index_next] == '(') {
+						if (auto result = _get_string_between_brackets(lstring, index_next)) {
 							std::string expr_string = result.value();
+							// why call _eval_expr with 0.0 here?
+							double x = 0.0;
+							if (c == '+' || c == '-') {
+								x = lsystem.standard_angle;
+							} else {
+								x = lsystem.standard_length;
+							}
 							double expr_value =
-								_eval_expr(expr_string, lsystem, 0.0).value_or(0.0);
+								_eval_expr(expr_string, lsystem, x).value_or(0.0);
 
 							lstring_expanded += _maybe_apply_rule(lsystem, c, &expr_value);
 							// move index to position after closing bracket

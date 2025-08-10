@@ -52,8 +52,9 @@ constexpr double pi = std::numbers::pi;
 } // namespace gk
 
 namespace color {
-constexpr uint32_t black =					0x00000000;
-constexpr uint32_t white =					0x00FFFFFF;
+
+constexpr uint32_t black =					0x000000FF;
+constexpr uint32_t white =					0xFFFFFFFF;
 constexpr uint32_t dark_grey =			0x005C5C5C;
 constexpr uint32_t light_grey =			0x00C5C5C5;
 

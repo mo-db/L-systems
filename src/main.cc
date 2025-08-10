@@ -28,7 +28,7 @@ int main(int argc, char *argv[]) {
 		lock_frame_buf();
 
 		// calculate axiom and rule lstrings
-		Plant axiom_plant = lsystem::generate_plant(modules.lsystem, Vec2{(double)app::video.width * 0.3, (double)app::video.height - 100.0},
+		lsystem.axiom.plant = lsystem::generate_plant(modules.lsystem, Vec2{(double)app::video.width * 0.3, (double)app::video.height - 100.0},
 				lsystem.axiom.text);
 
 		// calculate the lstring, every 30 frames
@@ -36,7 +36,7 @@ int main(int argc, char *argv[]) {
 			// the following should instead trigger if some parameter text changes
 			// do something with the result?
 			if (!lsystem::eval_parameters(lsystem)) {
-				puts("eval parameters failed");
+				puts("eval failed for some parameter");
 			}
 
 			lsystem.lstring = lsystem::generate_lstring(modules.lsystem);
@@ -45,12 +45,18 @@ int main(int argc, char *argv[]) {
 		}
 
 		// draw the plants
-		for (auto &branch : axiom_plant.branches) {
-			draw::line({*(branch.n1), *(branch.n2)}, color::fg, 0.0);
+		for (auto &branch : lsystem.axiom.plant.branches) {
+			draw::thin_line({*(branch.n1), *(branch.n2)}, color::fg);
 		}
-		for (auto &branch : lsystem.plant.branches) {
-			draw::line({*(branch.n1), *(branch.n2)}, color::fg, 0.0);
+		if (lsystem.live) {
+			for (auto &branch : lsystem.plant.branches) {
+				draw::thick_line_mesh({*(branch.n1), *(branch.n2)}, color::fg, lsystem.standard_wd, lsystem.standard_branch_seg_count);
+			}
 		}
+
+
+		// draw::thick_line({{200, 400}, {600, 700}}, color::fg, 40.0);
+		// draw::thick_line_mesh({{200, 400}, app::input.mouse}, color::fg, 40.0);
 
 		if (!update_gui(modules)) {
 			return 1;
@@ -264,14 +270,12 @@ bool update_gui(Modules &modules) {
           }
 
 					// change color based on conditon value
-					int colors_pushed = 0;
+					bool color_pushed = false;
 					if (lsystem.rules[i].condition_state == Lsystem::FIELD_STATE::ERROR) {
-						std::puts("condition error");
 						ImGui::PushStyleColor(ImGuiCol_Text, (ImVec4)ImColor::HSV(0.0f, 1.0f, 1.0f));
-						colors_pushed++;
+						color_pushed = true;
 					} else if (lsystem.rules[i].condition_state == Lsystem::FIELD_STATE::TRUE) {
-						std::puts("condition true");
-						colors_pushed++;
+						color_pushed = true;
 						ImGui::PushStyleColor(ImGuiCol_Text, (ImVec4)ImColor::HSV(0.3f, 1.0f, 1.0f));
 					}
 
@@ -279,8 +283,8 @@ bool update_gui(Modules &modules) {
 					// display condition and text
 					ImGui::InputText("condition", lsystem.rules[i].condition,
 													 lsystem.text_size);
-					if (colors_pushed > 0) {
-						ImGui::PopStyleColor(colors_pushed);
+					if (color_pushed) {
+						ImGui::PopStyleColor();
 					}
           ImGui::InputText("text", lsystem.rules[i].text, lsystem.text_size);
 
@@ -289,6 +293,12 @@ bool update_gui(Modules &modules) {
 						print_trace();
 						return false;
           }
+
+          if (ImGui::Button("Print L-string")) {
+						fmt::print("L-string: {}\n", lsystem.lstring);
+          }
+
+					ImGui::SliderFloat("wd", &lsystem.standard_wd, 1.0f, 50.0f);
 
           // ___SAVE_RULE___
 					// this works
@@ -308,11 +318,23 @@ bool update_gui(Modules &modules) {
 
 
 			ImGui::Text("nodes: %d", modules.lsystem.plant.node_counter);
+			ImGui::Checkbox("live Preview", &lsystem.live);
+			if (ImGui::Button("render")) {
+
+				auto t1 = std::chrono::high_resolution_clock::now();
+				for (auto &branch : lsystem.plant.branches) {
+					draw::thick_line_mesh({*(branch.n1), *(branch.n2)}, color::fg, lsystem.standard_wd, lsystem.standard_branch_seg_count);
+				}
+				auto t2 = std::chrono::high_resolution_clock::now();
+				std::chrono::duration<double, std::milli> dt_ms = t2 - t1;
+				std::cout << "dt_out: " << dt_ms << std::endl;
+			}
 
 			// variables
 			ImGui::SliderInt("iterations", &modules.lsystem.iterations, 0, 6);
 			ImGui::SliderFloat("length", &modules.lsystem.standard_length, 0.0, 100.0);
 			ImGui::SliderFloat("angle", &modules.lsystem.standard_angle, 0.0, gk::pi * 2.0);
+			ImGui::SliderInt("seg_count", &modules.lsystem.standard_branch_seg_count, 1, 50);
 
       enum class Selected {
         NONE,
@@ -355,11 +377,12 @@ bool update_gui(Modules &modules) {
 }
 
 void lock_frame_buf() {
+	SDL_SetRenderDrawColor(app::video.renderer, 0, 0, 0, 255);
+  SDL_RenderClear(app::video.renderer);
+
   assert(SDL_LockTexture(app::video.window_texture, NULL,
                          reinterpret_cast<void **>(&app::video.frame_buf),
                          &app::video.pitch));
-  std::fill_n(app::video.frame_buf, app::video.width * app::video.height,
-              color::bg);
 }
 
 void render() {
@@ -368,11 +391,14 @@ void render() {
   app::video.frame_buf = nullptr;
   app::video.pitch = 0;
 
+
   ImGui::Render();
   SDL_SetRenderScale(app::video.renderer, app::gui.io->DisplayFramebufferScale.x,
                      app::gui.io->DisplayFramebufferScale.y);
   ImGui_ImplSDLRenderer3_RenderDrawData(ImGui::GetDrawData(),
                                         app::video.renderer);
+
+	SDL_SetRenderDrawBlendMode(app::video.renderer, SDL_BLENDMODE_NONE);
   SDL_RenderPresent(app::video.renderer);
 }
 

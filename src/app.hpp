@@ -15,6 +15,7 @@ struct Video {
 	SDL_Renderer* renderer = nullptr;
 	SDL_Texture* window_texture = nullptr;
 	uint32_t *frame_buf = nullptr;
+	const SDL_PixelFormatDetails *pixel_format = SDL_GetPixelFormatDetails(SDL_PIXELFORMAT_RGBA32);
 	int pitch = 0;
 	int width = 0;
 	int height = 0;

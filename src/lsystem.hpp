@@ -35,9 +35,12 @@ struct Plant {
 
 
 struct Lsystem {
-	int iterations = 0;
+	bool live = true;
+	int iterations = 1;
 	float standard_length = 50.0;
 	float standard_angle = gk::pi / 2.0;
+	float standard_wd = 1.0;
+	int standard_branch_seg_count = 1;
 	static constexpr int alphabet_size = 6;
 	static constexpr int text_size = 512;
 	static constexpr int max_rules = 3;

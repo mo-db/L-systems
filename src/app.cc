@@ -21,7 +21,7 @@ void init(int width, int height) {
 
   // texture create with pixels and not window size . retina display scaling
   app::video.window_texture = SDL_CreateTexture(
-      app::video.renderer, SDL_PIXELFORMAT_XRGB8888, SDL_TEXTUREACCESS_STREAMING,
+      app::video.renderer, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STREAMING,
       app::video.width, app::video.height);
   assert(app::video.window_texture);
 
