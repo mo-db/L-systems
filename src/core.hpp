@@ -32,6 +32,7 @@
 
 // SDL
 #include <SDL3/SDL.h>
+#include <SDL3_image/SDL_image.h>
 #include <fmt/core.h>
 #include "imgui.h"
 #include "imgui_impl_sdl3.h"

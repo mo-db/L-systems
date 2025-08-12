@@ -2,20 +2,20 @@
 
 namespace draw {
 // world to screen conversion
-void set_pixel(int x, int y, uint32_t color) {
-	if (x >= 0 && y >= 0 && x < app::video.width && y < app::video.height) {
-		app::video.frame_buf[x + y * app::video.width] = color;
+void set_pixel(FrameBuf fb, int x, int y, uint32_t color) {
+	if (x >= 0 && y >= 0 && x < fb.width && y < fb.height) {
+		fb.pixels[x + y * fb.width] = color;
 	}
 }
 
 
 // Returns double the signed area but that's fine
-double edge_function(Vec2 a, Vec2 b, Vec2 c) {
+double _edge_function(Vec2 a, Vec2 b, Vec2 c) {
   return (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
 };
 
 
-void bary_triangle(Vec2 vert1, Vec2 vert2, Vec2 vert3, uint32_t color) {
+void bary_triangle(FrameBuf fb, Vec2 vert1, Vec2 vert2, Vec2 vert3, uint32_t color) {
 	int max_x = std::max(vert1.x, std::max(vert2.x, vert3.x));
 	int min_x = std::min(vert1.x, std::min(vert2.x, vert3.x));
 	int max_y = std::max(vert1.y, std::max(vert2.y, vert3.y));
@@ -28,23 +28,24 @@ void bary_triangle(Vec2 vert1, Vec2 vert2, Vec2 vert3, uint32_t color) {
 
 			// Calculate our edge function for all three edges of the triangle ABC
 			// the edge function is probably fliped because y=0 is top
-			double ABP = edge_function(vert1, vert2, p); 
-			double BCP = edge_function(vert2, vert3, p);
-			double CAP = edge_function(vert3, vert1, p);
+			double ABP = _edge_function(vert1, vert2, p); 
+			double BCP = _edge_function(vert2, vert3, p);
+			double CAP = _edge_function(vert3, vert1, p);
 
 			if (ABP >= 0 && BCP >= 0 && CAP >= 0) {
 				// Point is inside the triangle ABC
-				set_pixel(p.x, p.y, color);
+				set_pixel(fb, p.x, p.y, color);
 			}
 
 		}
 	}
 }
 
-
-void thick_line_mesh(const Line2 &line, uint32_t color, double wd, int seg_count) {
+// render a line as a mesh with thickness -> maybe gradient, texture, etc
+// if wd (thickness) < 2, draw a thin line, gradient possible too
+void wide_line(FrameBuf fb, const Line2 &line, uint32_t color, double wd) {
 	if (wd < 2.0) {
-		thin_line(line, color);
+		thin_line(fb, line, color);
 		return;
 	}
 	Vec2 line_vector = line.get_v();
@@ -53,6 +54,10 @@ void thick_line_mesh(const Line2 &line, uint32_t color, double wd, int seg_count
 	Vec2 vert1 = line.p1 + line.get_a().get_norm() * (wd / 2.0);
 	Vec2 vert2 = line.p1 - line.get_a().get_norm() * (wd / 2.0);
 
+	// for drawing long thin lines, a higher seg count is more efficient
+	// does not matter for plants though
+	// if use, implement ratio of thickness to length to determine
+	int seg_count = 1;
 	double seg_val = 1.0 / seg_count;
 
 	std::vector<Vec2> tri_verts{};
@@ -66,95 +71,84 @@ void thick_line_mesh(const Line2 &line, uint32_t color, double wd, int seg_count
 
 	// draw the triangles
 	for (int i = 0; i < seg_count * 2; i += 2) {
-		bary_triangle(tri_verts[i+1], tri_verts[i], tri_verts[i+2], 0xFF00FF00);
-		bary_triangle(tri_verts[i+1], tri_verts[i+2], tri_verts[i+3], 0xFF0000FF);
+		bary_triangle(fb, tri_verts[i+1], tri_verts[i], tri_verts[i+2], 0xFF00FFFF);
+		bary_triangle(fb, tri_verts[i+1], tri_verts[i+2], tri_verts[i+3], 0xFF0000FF);
 	}
 }
 
+// // render thick line as bresenham scanline + 2x triangles
+// void thick_line(const Line2 &line, uint32_t color, double wd) {
+// 	std::vector<Vec2> vertices{};
+// 	vertices.push_back(line.p1 + line.get_a().get_norm() * (wd / 2.0));
+// 	vertices.push_back(line.p1 - line.get_a().get_norm() * (wd / 2.0));
+// 	vertices.push_back(line.p2 - line.get_a().get_norm() * (wd / 2.0));
+// 	vertices.push_back(line.p2 + line.get_a().get_norm() * (wd / 2.0));
+//
+// 	double m = 0.0;
+// 	double dx = line.p2.x - line.p1.x;
+// 	double dy = line.p2.y - line.p1.y;
+// 	bool m_neg = false;
+//
+// 	if (dy != 0.0) {
+// 		m = dy / dx;
+// 	}
+//
+// 	if (m < 0) {
+// 		m_neg = true;
+// 	}
+//
+// 	Vec2 vert1 = vertices[0];
+// 	Vec2 vert2 = vertices[1];
+// 	Vec2 vert3 = vertices[2];
+// 	Vec2 vert4 = vertices[3];
+// 	Vec2 vert5{};
+// 	Vec2 vert6{};
+//
+// 	if (std::abs(m) > 1.0) {
+// 		std::sort(vertices.begin(), vertices.end(),
+// 							[](Vec2 &vertex1, Vec2 &vertex2){ return vertex1.y > vertex2.y; });
+// 		// search x coordinate of vert5
+// 		vert5 = {((vertices[1].y - vertices[0].y) +  m * vertices[0].x) / m, vertices[1].y};
+// 		// search x coordinate of vert6
+// 		vert6 = {((vertices[2].y - vertices[1].y) +  m * vertices[1].x) / m, vertices[2].y};
+// 	} else {
+// 		std::sort(vertices.begin(), vertices.end(),
+// 							[](Vec2 &vertex1, Vec2 &vertex2){ return vertex1.x < vertex2.x; });
+// 		// search y coordinate of vert5
+// 		vert5 = { vertices[1].x, m * (vertices[1].x - vertices[0].x) + vertices[0].y};
+// 		// search y coordinate of vert6
+// 		vert6 = { vertices[2].x, m * (vertices[2].x - vertices[1].x) + vertices[1].y};
+// 	}
+//
+// 	vert1 = vertices[0];
+// 	vert2 = vertices[1];
+// 	vert3 = vertices[2];
+// 	vert4 = vertices[3];
+//
+// 	plot_circle({vert1, 10.0}, 0xFF0000FF);
+// 	plot_circle({vert2, 10.0}, 0xFF00FF00);
+// 	plot_circle({vert3, 10.0}, 0xFFFF0000);
+// 	plot_circle({vert4, 10.0}, 0xFF00FFFF);
+//
+//
+// 	plot_circle({vert5, 10.0}, 0xFFFFFFFF);
+// 	plot_circle({vert6, 10.0}, 0xFFFFFFFF);
+//
+// 	// the line
+// 	thin_line({vert2, vert5}, 0xFFFFFFFF);
+// 	thin_line({vert2, vert6}, 0xFFFFFFFF);
+// 	thin_line({vert3, vert5}, 0xFFFFFFFF);
+// 	thin_line({vert3, vert6}, 0xFFFFFFFF);
+//
+// 	// the two triangles
+// 	thin_line({vert1, vert2}, 0xFF00FFFF);
+// 	thin_line({vert1, vert5}, 0xFF00FFFF);
+//
+// 	thin_line({vert4, vert3}, 0xFF00FFFF);
+// 	thin_line({vert4, vert6}, 0xFF00FFFF);
+// }
 
-// render thick line as bresenham scanline + 2x triangles
-void thick_line(const Line2 &line, uint32_t color, double wd) {
-	Line2 edge_line1{};
-	Line2 edge_line2{};
-	std::vector<Vec2> vertices{};
-	vertices.push_back(line.p1 + line.get_a().get_norm() * (wd / 2.0));
-	vertices.push_back(line.p1 - line.get_a().get_norm() * (wd / 2.0));
-	vertices.push_back(line.p2 - line.get_a().get_norm() * (wd / 2.0));
-	vertices.push_back(line.p2 + line.get_a().get_norm() * (wd / 2.0));
-
-	double m = 0.0;
-	double dx = line.p2.x - line.p1.x;
-	double dy = line.p2.y - line.p1.y;
-	bool m_neg = false;
-
-	if (dy != 0.0) {
-		m = dy / dx;
-	}
-
-	if (m < 0) {
-		m_neg = true;
-	}
-	// m = std::abs(m);
-
-	// fmt::print("m: {}\n", m);
-	fmt::print("m_neg: {}\n", m_neg);
-
-
-	Vec2 vert1 = vertices[0];
-	Vec2 vert2 = vertices[1];
-	Vec2 vert3 = vertices[2];
-	Vec2 vert4 = vertices[3];
-	Vec2 vert5{};
-	Vec2 vert6{};
-
-	if (std::abs(m) > 1.0) {
-		std::sort(vertices.begin(), vertices.end(),
-							[](Vec2 &vertex1, Vec2 &vertex2){ return vertex1.y > vertex2.y; });
-		// search x coordinate of vert5
-		vert5 = {((vertices[1].y - vertices[0].y) +  m * vertices[0].x) / m, vertices[1].y};
-		// search x coordinate of vert6
-		vert6 = {((vertices[2].y - vertices[1].y) +  m * vertices[1].x) / m, vertices[2].y};
-	} else {
-		std::sort(vertices.begin(), vertices.end(),
-							[](Vec2 &vertex1, Vec2 &vertex2){ return vertex1.x < vertex2.x; });
-		// search y coordinate of vert5
-		vert5 = { vertices[1].x, m * (vertices[1].x - vertices[0].x) + vertices[0].y};
-		// search y coordinate of vert6
-		vert6 = { vertices[2].x, m * (vertices[2].x - vertices[1].x) + vertices[1].y};
-	}
-
-	vert1 = vertices[0];
-	vert2 = vertices[1];
-	vert3 = vertices[2];
-	vert4 = vertices[3];
-
-	plot_circle({vert1, 10.0}, 0xFF0000FF);
-	plot_circle({vert2, 10.0}, 0xFF00FF00);
-	plot_circle({vert3, 10.0}, 0xFFFF0000);
-	plot_circle({vert4, 10.0}, 0xFF00FFFF);
-
-
-	plot_circle({vert5, 10.0}, 0xFFFFFFFF);
-	plot_circle({vert6, 10.0}, 0xFFFFFFFF);
-
-	// the line
-	thin_line({vert2, vert5}, 0xFFFFFFFF);
-	thin_line({vert2, vert6}, 0xFFFFFFFF);
-	thin_line({vert3, vert5}, 0xFFFFFFFF);
-	thin_line({vert3, vert6}, 0xFFFFFFFF);
-
-	// the two triangles
-	thin_line({vert1, vert2}, 0xFF00FFFF);
-	thin_line({vert1, vert5}, 0xFF00FFFF);
-
-	thin_line({vert4, vert3}, 0xFF00FFFF);
-	thin_line({vert4, vert6}, 0xFF00FFFF);
-
-
-	//thick_line bresenham drawing
-}
- 
-void thin_line(const Line2 &line, uint32_t color) {
+void thin_line(FrameBuf fb, const Line2 &line, uint32_t color) {
   int x0 = std::round(line.p1.x);
   int y0 = std::round(line.p1.y);
   int x1 = std::round(line.p2.x);
@@ -165,7 +159,7 @@ void thin_line(const Line2 &line, uint32_t color) {
   int err = dx + dy, e2; /* error value e_xy */
 
   for (;;) { /* loop */
-    set_pixel(x0, y0, color);
+    set_pixel(fb, x0, y0, color);
     e2 = 2 * err;
     if (e2 >= dy) { /* e_xy+e_x > 0 */
       if (x0 == x1)
@@ -181,23 +175,23 @@ void thin_line(const Line2 &line, uint32_t color) {
     }
   }
 }
-
-
-void plot_circle(const Circle2 &circle, uint32_t color) {
-	int xm = std::round(circle.c.x);
-	int ym = std::round(circle.c.y);
-	int r = std::round(circle.radius());
-  int x = -r, y = 0, err = 2 - 2 * r; /* bottom left to top right */
-  do {
-		set_pixel(xm - x, ym + y, color); //   I. Quadrant +x +y
-		set_pixel(xm - y, ym - x, color); //  II. Quadrant -x +y
-		set_pixel(xm + x, ym - y, color); // III. Quadrant -x -y
-		set_pixel(xm + y, ym + x, color); //  IV. Quadrant +x -y
-    r = err;
-    if (r <= y)
-      err += ++y * 2 + 1; /* e_xy+e_y < 0 */
-    if (r > x || err > y) /* e_xy+e_x > 0 or no 2nd y-step */
-      err += ++x * 2 + 1; /* -> x-step now */
-  } while (x < 0);
-}
+//
+//
+// void plot_circle(const Circle2 &circle, uint32_t color) {
+// 	int xm = std::round(circle.c.x);
+// 	int ym = std::round(circle.c.y);
+// 	int r = std::round(circle.radius());
+//   int x = -r, y = 0, err = 2 - 2 * r; /* bottom left to top right */
+//   do {
+// 		set_pixel(xm - x, ym + y, color); //   I. Quadrant +x +y
+// 		set_pixel(xm - y, ym - x, color); //  II. Quadrant -x +y
+// 		set_pixel(xm + x, ym - y, color); // III. Quadrant -x -y
+// 		set_pixel(xm + y, ym + x, color); //  IV. Quadrant +x -y
+//     r = err;
+//     if (r <= y)
+//       err += ++y * 2 + 1; /* e_xy+e_y < 0 */
+//     if (r > x || err > y) /* e_xy+e_x > 0 or no 2nd y-step */
+//       err += ++x * 2 + 1; /* -> x-step now */
+//   } while (x < 0);
+// }
 } // namespace draw

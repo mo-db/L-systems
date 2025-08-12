@@ -8,6 +8,7 @@ struct Context {
 	bool keep_running = true;
 	std::string exec_path = "";
 	std::string save_path = "";
+	std::string render_path = "";
 };
 
 struct Video {

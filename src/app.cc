@@ -27,11 +27,9 @@ void init(int width, int height) {
 
 	// set the file system paths
 	app::context.exec_path = SDL_GetBasePath();
-	std::filesystem::path base = app::context.exec_path;
-	std::filesystem::path saves =
-		(base / ".." / ".." / "saves").lexically_normal();
-	app::context.save_path = saves;
-	std::string save_path = saves.string();
+	// std::filesystem::path saves = (base / ".." / ".." / "saves").lexically_normal();
+	app::context.save_path = fmt::format("{}/saves", app::context.exec_path);
+	app::context.render_path = fmt::format("{}/renders", app::context.exec_path);
 
 	// init ImGui
 	IMGUI_CHECKVERSION();

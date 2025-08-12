@@ -48,7 +48,7 @@ void _turtle_action(Plant &plant, Lsystem &lsystem, const char c,
 			visable = false;
 		}
 		if (value) {
-			x = *value * lsystem.standard_length;
+			x = *value;
 		} else {
 			x = lsystem.standard_length;
 		}

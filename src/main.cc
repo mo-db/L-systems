@@ -44,13 +44,11 @@ int main(int argc, char *argv[]) {
 					lsystem.lstring);
 		}
 
-		// draw the plants
-		for (auto &branch : lsystem.axiom.plant.branches) {
-			draw::thin_line({*(branch.n1), *(branch.n2)}, color::fg);
-		}
 		if (lsystem.live) {
 			for (auto &branch : lsystem.plant.branches) {
-				draw::thick_line_mesh({*(branch.n1), *(branch.n2)}, color::fg, lsystem.standard_wd, lsystem.standard_branch_seg_count);
+				draw::wide_line(draw::FrameBuf{(uint32_t*)app::video.frame_buf,
+						app::video.width, app::video.height}, 
+						Line2{*branch.n1, *branch.n2}, color::fg, lsystem.standard_wd);
 			}
 		}
 
@@ -323,7 +321,9 @@ bool update_gui(Modules &modules) {
 
 				auto t1 = std::chrono::high_resolution_clock::now();
 				for (auto &branch : lsystem.plant.branches) {
-					draw::thick_line_mesh({*(branch.n1), *(branch.n2)}, color::fg, lsystem.standard_wd, lsystem.standard_branch_seg_count);
+					draw::wide_line(draw::FrameBuf{(uint32_t*)app::video.frame_buf,
+							app::video.width, app::video.height}, 
+							Line2{*branch.n1, *branch.n2}, color::fg, lsystem.standard_wd);
 				}
 				auto t2 = std::chrono::high_resolution_clock::now();
 				std::chrono::duration<double, std::milli> dt_ms = t2 - t1;
@@ -331,46 +331,37 @@ bool update_gui(Modules &modules) {
 			}
 
 			// variables
-			ImGui::SliderInt("iterations", &modules.lsystem.iterations, 0, 6);
-			ImGui::SliderFloat("length", &modules.lsystem.standard_length, 0.0, 100.0);
+			ImGui::SliderInt("iterations", &modules.lsystem.iterations, 0, 12);
+			ImGui::SliderFloat("length", &modules.lsystem.standard_length, 0.0, 200.0);
 			ImGui::SliderFloat("angle", &modules.lsystem.standard_angle, 0.0, gk::pi * 2.0);
 			ImGui::SliderInt("seg_count", &modules.lsystem.standard_branch_seg_count, 1, 50);
 
-      enum class Selected {
-        NONE,
-        AXIOM,
-        RULE_A,
-      };
+			if (ImGui::Button("render to images")) {
+				int frames = 320;
+				int width = 640;
+				int height = 480;
+				SDL_Surface *frame_surf = SDL_CreateSurface(width, height, SDL_PIXELFORMAT_RGBA32);
+				for (int i = 0; i < frames; i ++) {
+					lsystem.standard_angle -= 0.003;
+        	SDL_FillSurfaceRect(frame_surf, nullptr, 0xFF000000);
+					lsystem.lstring = lsystem::generate_lstring(modules.lsystem);
+					lsystem.plant = lsystem::generate_plant(modules.lsystem,
+							Vec2{(double)width * 0.5,
+							(double)height * 0.9}, lsystem.lstring);
+					for (auto &branch : lsystem.plant.branches) {
+						draw::wide_line(draw::FrameBuf{(uint32_t*)frame_surf->pixels,
+								frame_surf->w, frame_surf->h}, 
+								Line2{*branch.n1, *branch.n2}, 0xFFFF00FF, lsystem.standard_wd);
+					}
 
-      // Left
-      static Selected selected = Selected::NONE;
-      {
-        ImGui::BeginChild("left pane", ImVec2(150, 0),
-                          ImGuiChildFlags_Borders | ImGuiChildFlags_ResizeX);
-        if (ImGui::Selectable("axiom", selected == Selected::AXIOM)) {
-          selected = Selected::AXIOM;
-        }
-        static char axiom[32] = "";
-        ImGui::InputText("default", axiom, 32);
-
-        if (ImGui::Selectable("rule_A", selected == Selected::RULE_A)) {
-          selected = Selected::RULE_A;
-        }
-        if (ImGui::Button("unselect")) {
-          selected = Selected::NONE;
-        }
-
-        ImGui::EndChild();
-      }
-      ImGui::SameLine();
-      {
-        ImGui::BeginChild("test view",
-                          ImVec2(0, -ImGui::GetFrameHeightWithSpacing()));
-        static char axiom[32] = "";
-        ImGui::InputText("default", axiom, 32);
-        ImGui::EndChild();
-      }
-    }
+					fmt::print("{}/frame{:06}\n", app::context.render_path, i);
+					std::string frame_file = fmt::format("{}/frame{:06}.png", app::context.render_path, i);
+					assert(IMG_SavePNG(frame_surf, frame_file.c_str()));
+					// assert(SDL_SaveBMP(frame_surf, frame_file.c_str()));
+				}
+				SDL_DestroySurface(frame_surf);
+			}
+		}
     ImGui::End();
   }
 	return true;

@@ -3,6 +3,7 @@ project('lsys', 'c', 'cpp',
 
 # dependency method order: pkgconf -> cmake -> wrap
 sdl3_dep = dependency('sdl3')
+sdl3_image_dep = dependency('sdl3_image')
 fmt_dep = dependency('fmt')
 imgui_dep = dependency('imgui')
 
