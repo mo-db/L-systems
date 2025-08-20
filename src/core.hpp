@@ -37,8 +37,8 @@
 #include "imgui.h"
 #include "imgui_impl_sdl3.h"
 #include "imgui_impl_sdlrenderer3.h"
-#include "exprtk.hpp"
-#include "backward.hpp"
+#include "header_only_libs/exprtk.hpp"
+#include "header_only_libs/backward.hpp"
 
 inline void print_trace() {
 	using namespace backward;

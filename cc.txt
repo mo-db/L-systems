@@ -1,4 +1,4 @@
 # clang ships with feature flags, to display do:
 - clang -dM -E -x c /dev/null
 
-# ...
+# add libraries as subproject with custom meson.build file

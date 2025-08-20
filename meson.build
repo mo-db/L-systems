@@ -21,7 +21,7 @@ fmt_dep = dependency('fmt')
 # imgui_dep = dependency('imgui')
 liblo_dep = dependency('liblo')
 
-# ask for imgui, but fall back to our subproject (subprojects/imgui/meson.build)
+# ask for imgui, but fall back to subproject (subprojects/imgui/meson.build)
 imgui_dep = dependency('imgui', fallback: ['imgui', 'imgui_dep'])
 
 subdir('src')
