@@ -21,6 +21,11 @@ struct Video {
 	int width = 0;
 	int height = 0;
 	double window_scale;
+	// viewport
+	// can both be stored as a vector
+	Vec2 screen_offset{};
+	double screen_scale_x = 0.0;
+	double screen_scale_y = 0.0;
 };
 
 struct Gui {

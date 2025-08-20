@@ -1,1 +1,4 @@
-- use asserts at function start
+# clang ships with feature flags, to display do:
+- clang -dM -E -x c /dev/null
+
+# ...

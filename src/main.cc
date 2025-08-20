@@ -3,12 +3,27 @@
 #include "graphics.hpp"
 #include "rasterize.hpp"
 #include "modules.hpp"
+#include <lo/lo.h>
+
 
 void process_events();
 void lock_frame_buf();
 bool update_gui(Modules &modules);
 void render();
 void cleanup();
+
+int send(void) {
+    lo_address addr = lo_address_new("127.0.0.1", "7400");
+    float thickness = 0.123f;
+    int rc = lo_send(addr, "/fractal/thickness", "f", thickness);
+    if (rc == -1) {
+        fprintf(stderr, "send failed\n");
+        return 1;
+    }
+    lo_address_free(addr);
+    return 0;
+}
+
 
 // store lines in main? vector<line>
 int main(int argc, char *argv[]) {
@@ -60,6 +75,19 @@ int main(int argc, char *argv[]) {
 			return 1;
 		}
 
+		// where to put this?
+		// -> if strg-down on mouse down save mouse coords as old offset cords
+		// -> every frame calculate offset with old mouse coords to new mouse
+		// position
+		if (!viewport::update_vars()) {
+			// puts("wtf?");
+		}
+		fmt::print("offset: {},{}\n", viewport::vars.xy_offset.x, viewport::vars.xy_offset.y);
+		if (viewport::vars.panning_active) {
+			puts("pan active");
+		}
+
+		// update viewportx§
 		render();
 		accum++;
 		accum %= 60;
@@ -67,6 +95,15 @@ int main(int argc, char *argv[]) {
 	cleanup();
 	return 0;
 }
+
+// this updates the viewport variables, they are used in the transform funcs
+// if strg and mouse click, save cords, then if mouse up while strg, set offset
+// per delta, if mouse still down and strg up then reset to saved cords
+//
+//
+// save the old xy offset value
+// 
+
 
 // could return vector of key presses, maybe pairs of key and state
 void process_events() {
@@ -336,6 +373,12 @@ bool update_gui(Modules &modules) {
 			ImGui::SliderFloat("angle", &modules.lsystem.standard_angle, 0.0, gk::pi * 2.0);
 			ImGui::SliderInt("seg_count", &modules.lsystem.standard_branch_seg_count, 1, 50);
 
+
+			if (ImGui::Button("send osc")) {
+				send();
+			}
+
+			// this should not be here as a whole
 			if (ImGui::Button("render to images")) {
 				int frames = 320;
 				int width = 640;

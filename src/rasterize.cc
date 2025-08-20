@@ -1,7 +1,41 @@
 #include "rasterize.hpp"
 
+// all calculations are done in worldspace
+namespace viewport {
+Vec2 screen_to_world(const Vec2 &vertex_screen) {
+	Vec2 vertex_world = vertex_screen + vars.xy_offset;
+	return vertex_world;
+}
+Vec2 world_to_screen(const Vec2 &vertex_world) {
+	Vec2 vertex_screen = vertex_world + vars.xy_offset;
+	return vertex_screen;
+}
+bool update_vars() { // ctrl_transform()?
+	// save reference cords
+	if (viewport::vars.panning_active) {
+		if (app::input.ctrl_set) {
+			// add new offset to old offset
+			viewport::vars.xy_offset = app::input.mouse - viewport::vars.saved_mouse + viewport::vars.xy_offset_old;
+			if (!app::input.mouse_left_down) {
+				viewport::vars.panning_active = false;
+			}
+		} else {
+			// cancel
+			viewport::vars.xy_offset = viewport::vars.xy_offset_old;
+			viewport::vars.panning_active = false;
+		}
+
+	// activate panning, initialize the vars
+	} else if (app::input.ctrl_set && app::input.mouse_left_down) {
+		viewport::vars.saved_mouse = app::input.mouse;
+		viewport::vars.xy_offset_old = viewport::vars.xy_offset;
+		viewport::vars.panning_active = true;
+	}
+	return 1;
+}
+} // namespace viewport
+
 namespace draw {
-// world to screen conversion
 void set_pixel(FrameBuf fb, int x, int y, uint32_t color) {
 	if (x >= 0 && y >= 0 && x < fb.width && y < fb.height) {
 		fb.pixels[x + y * fb.width] = color;
@@ -15,7 +49,12 @@ double _edge_function(Vec2 a, Vec2 b, Vec2 c) {
 };
 
 
-void bary_triangle(FrameBuf fb, Vec2 vert1, Vec2 vert2, Vec2 vert3, uint32_t color) {
+// this function needs world to screen convertion 
+void bary_triangle(FrameBuf fb, Vec2 vert1_in, Vec2 vert2_in, Vec2 vert3_in, uint32_t color) {
+	Vec2 vert1 = viewport::world_to_screen(vert1_in);
+	Vec2 vert2 = viewport::world_to_screen(vert2_in);
+	Vec2 vert3 = viewport::world_to_screen(vert3_in);
+
 	int max_x = std::max(vert1.x, std::max(vert2.x, vert3.x));
 	int min_x = std::min(vert1.x, std::min(vert2.x, vert3.x));
 	int max_y = std::max(vert1.y, std::max(vert2.y, vert3.y));
@@ -41,6 +80,7 @@ void bary_triangle(FrameBuf fb, Vec2 vert1, Vec2 vert2, Vec2 vert3, uint32_t col
 	}
 }
 
+// no need to world_to_screen for the lines?
 // render a line as a mesh with thickness -> maybe gradient, texture, etc
 // if wd (thickness) < 2, draw a thin line, gradient possible too
 void wide_line(FrameBuf fb, const Line2 &line, uint32_t color, double wd) {
@@ -74,6 +114,38 @@ void wide_line(FrameBuf fb, const Line2 &line, uint32_t color, double wd) {
 		bary_triangle(fb, tri_verts[i+1], tri_verts[i], tri_verts[i+2], 0xFF00FFFF);
 		bary_triangle(fb, tri_verts[i+1], tri_verts[i+2], tri_verts[i+3], 0xFF0000FF);
 	}
+}
+
+// this function needs world to screen convertion 
+void thin_line(FrameBuf fb, const Line2 &line_world, uint32_t color) {
+	// world to screen conversion
+	Line2 line = {viewport::world_to_screen(line_world.p1),
+								viewport::world_to_screen(line_world.p2)};
+  int x0 = std::round(line.p1.x);
+  int y0 = std::round(line.p1.y);
+  int x1 = std::round(line.p2.x);
+  int y1 = std::round(line.p2.y);
+
+  int dx = abs(x1 - x0), sx = x0 < x1 ? 1 : -1;
+  int dy = -abs(y1 - y0), sy = y0 < y1 ? 1 : -1;
+  int err = dx + dy, e2; /* error value e_xy */
+
+  for (;;) { /* loop */
+    set_pixel(fb, x0, y0, color);
+    e2 = 2 * err;
+    if (e2 >= dy) { /* e_xy+e_x > 0 */
+      if (x0 == x1)
+        break;
+      err += dy;
+      x0 += sx;
+    }
+    if (e2 <= dx) { /* e_xy+e_y < 0 */
+      if (y0 == y1)
+        break;
+      err += dx;
+      y0 += sy;
+    }
+  }
 }
 
 // // render thick line as bresenham scanline + 2x triangles
@@ -148,33 +220,6 @@ void wide_line(FrameBuf fb, const Line2 &line, uint32_t color, double wd) {
 // 	thin_line({vert4, vert6}, 0xFF00FFFF);
 // }
 
-void thin_line(FrameBuf fb, const Line2 &line, uint32_t color) {
-  int x0 = std::round(line.p1.x);
-  int y0 = std::round(line.p1.y);
-  int x1 = std::round(line.p2.x);
-  int y1 = std::round(line.p2.y);
-
-  int dx = abs(x1 - x0), sx = x0 < x1 ? 1 : -1;
-  int dy = -abs(y1 - y0), sy = y0 < y1 ? 1 : -1;
-  int err = dx + dy, e2; /* error value e_xy */
-
-  for (;;) { /* loop */
-    set_pixel(fb, x0, y0, color);
-    e2 = 2 * err;
-    if (e2 >= dy) { /* e_xy+e_x > 0 */
-      if (x0 == x1)
-        break;
-      err += dy;
-      x0 += sx;
-    }
-    if (e2 <= dx) { /* e_xy+e_y < 0 */
-      if (y0 == y1)
-        break;
-      err += dx;
-      y0 += sy;
-    }
-  }
-}
 //
 //
 // void plot_circle(const Circle2 &circle, uint32_t color) {
