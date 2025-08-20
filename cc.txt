@@ -1,4 +1,10 @@
 # clang ships with feature flags, to display do:
 - clang -dM -E -x c /dev/null
 
-# add libraries as subproject with custom meson.build file
+# libraries in use
+- SDL3 - homebrew
+- Imgui - custom subproject
+- fmt - homebrew
+- liblo - homebrew
+- exprtk - header only
+- backwards - header only
