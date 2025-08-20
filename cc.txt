@@ -6,5 +6,7 @@
 - Imgui - custom subproject
 - fmt - homebrew
 - liblo - homebrew
+
 - exprtk - header only
 - backwards - header only
+- miniaudio - header only
