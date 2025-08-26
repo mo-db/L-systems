@@ -66,6 +66,7 @@ struct Lsystem {
 	} axiom;
 	struct Rule {
 		int symbol_index = 0;
+		int n_args = 1;
 		char condition[text_size] = "0.0";
 		FIELD_STATE condition_state = FIELD_STATE::FALSE;
 		char text[text_size] = "";

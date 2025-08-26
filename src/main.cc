@@ -24,6 +24,9 @@ int send(void) {
     return 0;
 }
 
+// a -> a(x, y, l)
+// a(x, y, l) -> a((x/l)/l, y/l*2; l-1)[b]
+// a<sin(l)>
 
 // store lines in main? vector<line>
 int main(int argc, char *argv[]) {
@@ -303,6 +306,13 @@ bool update_gui(Modules &modules) {
             }
             ImGui::EndCombo();
           }
+
+					// num args
+					ImGui::RadioButton("1", &lsystem.rules[i].n_args, 1); ImGui::SameLine();
+					ImGui::RadioButton("2", &lsystem.rules[i].n_args, 2); ImGui::SameLine();
+					ImGui::RadioButton("3", &lsystem.rules[i].n_args, 3);
+					fmt::print("rule{}, args: {}\n", i, lsystem.rules[i].n_args);
+
 
 					// change color based on conditon value
 					bool color_pushed = false;
