@@ -102,4 +102,9 @@ bool eval_parameters(Lsystem &lsystem);
 bool save_rule_as_file(Lsystem::Rule &rule, const std::string &save_file_name);
 bool load_rule_from_file(Lsystem::Rule &rule, std::string &save_file_name);
 std::optional<std::vector<std::string>> scan_saves();
+
+
+
+std::string subst_arg(const std::string arg, const std::string rule_arg);
+
 } // namespace lsystem

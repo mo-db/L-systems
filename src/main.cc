@@ -46,11 +46,13 @@ int main(int argc, char *argv[]) {
 		lock_frame_buf();
 
 		// calculate axiom and rule lstrings
-		lsystem.axiom.plant = lsystem::generate_plant(modules.lsystem, Vec2{(double)app::video.width * 0.3, (double)app::video.height - 100.0},
-				lsystem.axiom.text);
+		// lsystem.axiom.plant = lsystem::generate_plant(modules.lsystem, Vec2{(double)app::video.width * 0.3, (double)app::video.height - 100.0},
+		// 		lsystem.axiom.text);
 
+		// INFO dont to at the moment
 		// calculate the lstring, every 30 frames
-		if (accum == 0) {
+		// if (accum == 0) {
+		if(accum == -1) {
 			// the following should instead trigger if some parameter text changes
 			// do something with the result?
 			if (!lsystem::eval_parameters(lsystem)) {
@@ -62,13 +64,15 @@ int main(int argc, char *argv[]) {
 					lsystem.lstring);
 		}
 
-		if (lsystem.live) {
-			for (auto &branch : lsystem.plant.branches) {
-				draw::wide_line(draw::FrameBuf{(uint32_t*)app::video.frame_buf,
-						app::video.width, app::video.height}, 
-						Line2{*branch.n1, *branch.n2}, color::fg, lsystem.standard_wd);
-			}
-		}
+
+
+		// if (lsystem.live) {
+		// 	for (auto &branch : lsystem.plant.branches) {
+		// 		draw::wide_line(draw::FrameBuf{(uint32_t*)app::video.frame_buf,
+		// 				app::video.width, app::video.height}, 
+		// 				Line2{*branch.n1, *branch.n2}, color::fg, lsystem.standard_wd);
+		// 	}
+		// }
 
 
 		// draw::thick_line({{200, 400}, {600, 700}}, color::fg, 40.0);
@@ -85,7 +89,7 @@ int main(int argc, char *argv[]) {
 		if (!viewport::update_vars()) {
 			// puts("wtf?");
 		}
-		fmt::print("offset: {},{}\n", viewport::vars.xy_offset.x, viewport::vars.xy_offset.y);
+		// fmt::print("offset: {},{}\n", viewport::vars.xy_offset.x, viewport::vars.xy_offset.y);
 		if (viewport::vars.panning_active) {
 			puts("pan active");
 		}
@@ -311,7 +315,7 @@ bool update_gui(Modules &modules) {
 					ImGui::RadioButton("1", &lsystem.rules[i].n_args, 1); ImGui::SameLine();
 					ImGui::RadioButton("2", &lsystem.rules[i].n_args, 2); ImGui::SameLine();
 					ImGui::RadioButton("3", &lsystem.rules[i].n_args, 3);
-					fmt::print("rule{}, args: {}\n", i, lsystem.rules[i].n_args);
+					// fmt::print("rule{}, args: {}\n", i, lsystem.rules[i].n_args);
 
 
 					// change color based on conditon value
@@ -337,6 +341,15 @@ bool update_gui(Modules &modules) {
           if (ImGui::Button("Button")) {
 						print_trace();
 						return false;
+          }
+
+					static char arg[512];
+					static char rule_arg[512];
+          ImGui::InputText("arg", arg, 512);
+          ImGui::InputText("rule_arg", rule_arg, 512);
+          if (ImGui::Button("Parse arg")) {
+						std::string new_arg = lsystem::subst_arg(arg, rule_arg);
+						std::cout << new_arg << std::endl;
           }
 
           if (ImGui::Button("Print L-string")) {

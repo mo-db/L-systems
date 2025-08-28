@@ -40,6 +40,10 @@
 #include "header_only_libs/exprtk.hpp"
 #include "header_only_libs/backward.hpp"
 
+
+#define print_info(msg) \
+    std::cout << "INFO:" << __FILE__ << ":" << __LINE__ << ":" << __func__ << "(), " << msg << std::endl;
+
 inline void print_trace() {
 	using namespace backward;
 	StackTrace st; st.load_here(32);
