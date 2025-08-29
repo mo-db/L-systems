@@ -91,4 +91,26 @@ inline bool equal_epsilon(double x, double y) {
 inline bool equal_iepsilon(double x, double y) {
 	return (x < y + gk::iepsilon && x > y - gk::iepsilon);
 }
+inline std::string get_substr(const std::string &str, const int index, const char c) {
+	int field_end = str.find(c, index);
+	std::string substr = "";
+	if (field_end != std::string::npos) {
+		substr = str.substr(index, field_end);
+	}
+	return substr;
+}
+
+inline std::string trim(const std::string &s) {
+    size_t start = 0;
+    while (start < s.size() && s[start] == ' ') {
+        ++start;
+    }
+
+    size_t end = s.size();
+    while (end > start && s[end - 1] == ' ') {
+        --end;
+    }
+
+    return s.substr(start, end - start);
+}
 } // namespace util

@@ -1,0 +1,68 @@
+direction: down
+vars: {
+  d2-config: {
+    layout-engine: elk
+  }
+  d2-legend: {
+    exclemation: '!: function can terminate'
+    return: '->: return value'
+    arg: 'Argument: "base|pattern|{repeat}[scale]"'
+    symbol: 'Symbol: symbol<x; y; z>'
+  }
+}
+
+app: 'app.cc' {
+  # structs
+  context_struct: 'inline context'
+  context_struct.shape: stored_data
+  video_struct: 'inline video'
+  video_struct.shape: stored_data
+  gui_struct: 'inline gui'
+  gui_struct.shape: stored_data
+  input_struct: 'inline input'
+  input_struct.shape: stored_data
+  context_struct -- video_struct -- gui_struct -- input_struct
+  # functions
+  main: '!main()'
+  update_gui: 'update_gui()'
+  # relations
+  main -> update_gui
+}
+
+core: 'core.hpp' {
+  # structs
+  # functions
+  util: 'util' {
+    trim: 'trim() -> std::string'
+    get_substr: 'get_substr() -> std::string'
+    equal_epsilon: 'equal_epsilon() -> bool'
+    equal_iepsilon: 'equal_iepsilon() -> bool'
+  }
+  # relations
+}
+
+lsystem: 'lsystem.cc' {
+  # structs
+  lsystem_struct: 'inline lsystem'
+  lsystem_struct.shape: stored_data
+  # functions
+  lstring_expand: 'lstring_expand() -> std::string'
+  parse_arg: 'parse_arg() -> bool'
+  parse_block: 'parse_block() -> bool'
+  arg_rulearg_substitute: 'arg_rulearg_substitute() -> std::string'
+  maybe_apply_rule: 'maybe_apply_rule() -> bool'
+  parse_args: 'parse_args() -> int'
+  try_block_match: 'try_block_match() -> bool'
+  op_is_valid: 'valid_op() -> bool'
+  # relations
+  lstring_expand -> maybe_apply_rule
+  maybe_apply_rule -> arg_rulearg_substitute
+  maybe_apply_rule -> parse_args
+  arg_rulearg_substitute -> parse_arg
+  arg_rulearg_substitute -> parse_block
+  parse_block -> op_is_valid
+  arg_rulearg_substitute -> try_block_match
+}
+
+# global relations
+app.main -> lsystem.lstring_expand

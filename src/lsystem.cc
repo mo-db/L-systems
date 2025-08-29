@@ -1,31 +1,7 @@
 #include "lsystem.hpp"
 #include "core.hpp"
 
-namespace lsystem {
-
-// returns string between brackets, index must sit on '<'
-std::optional<std::string> _get_string_between_brackets(std::string in_string, const int index) {
-	assert(in_string[index] == '<');
-
-	// set offset_index to the first char of the string
-	int offset_index = index + 1;	
-	std::string expr_string = "";
-
-	// fill expr_string
-  bool bracket_closes;
-  while ((bracket_closes = (offset_index < (int)in_string.size())) &&
-         in_string[offset_index] != '>') {
-    expr_string += in_string[offset_index++];
-  }
-
-	// only return expr_string if there was a closing bracket
-  if (bracket_closes) {
-    return expr_string;
-  } else {
-		return {};
-  }
-}
-
+namespace ls {
 Vec2 _calculate_move(Turtle &turtle, const double length) {
 	Vec2 position = *turtle.node;
 	position.x += length * cos(turtle.angle);
@@ -35,8 +11,7 @@ Vec2 _calculate_move(Turtle &turtle, const double length) {
 }
 void _turn(Turtle &turtle, const double angle) { turtle.angle += angle; }
 
-void _turtle_action(Plant &plant, Lsystem &lsystem, const char c,
-                   const double *value) {
+void _turtle_action(Plant &plant, const char c, const double *value) {
 	double x;
 	Turtle &turtle = plant.turtle;
 	std::vector<Turtle> &turtle_stack = plant.turtle_stack;
@@ -95,7 +70,7 @@ void _turtle_action(Plant &plant, Lsystem &lsystem, const char c,
 }
 
 
-Plant generate_plant(Lsystem &lsystem, const Vec2 start, const std::string lstring) {
+Plant generate_plant(const Vec2 start, const std::string lstring) {
 	Plant plant{}; // plant muss parameter sein
 	plant.turtle.node = plant.add_node(start);
 
@@ -104,7 +79,7 @@ Plant generate_plant(Lsystem &lsystem, const Vec2 start, const std::string lstri
 		char c = lstring[index];
 
 		if (c == '[' || c == ']') {
-			_turtle_action(plant, lsystem, c, nullptr);
+			_turtle_action(plant, c, nullptr);
 			index++;
 		} else {
 
@@ -112,23 +87,22 @@ Plant generate_plant(Lsystem &lsystem, const Vec2 start, const std::string lstri
 			if (index + 1 < (int)lstring.size()) {
 
 				if (lstring[index + 1] == '<') {
-					if (auto result = _get_string_between_brackets(lstring, index + 1)) {
-						std::string expr_string = result.value();
-						double expr_value = atof(expr_string.c_str());
-						_turtle_action(plant, lsystem, c, &expr_value);
-						index += (int)expr_string.size() + 3;
-					} else {
-						_turtle_action(plant, lsystem, c, nullptr);
+					std::string expr_str = util::get_substr(lstring, index + 2, '>');
+					if (expr_str.empty()) {
+						_turtle_action(plant, c, nullptr);
 						index++;
+					} else {
+						double expr_value = atof(expr_str.c_str());
+						_turtle_action(plant, c, &expr_value);
+						index += (int)expr_str.size() + 3;
 					}
-
 				} else {
-					_turtle_action(plant, lsystem, c, nullptr);
+					_turtle_action(plant, c, nullptr);
 					index++;
 				}
 
 			} else {
-				_turtle_action(plant, lsystem, c, nullptr);
+				_turtle_action(plant, c, nullptr);
 				index++;
 			}
 
@@ -138,7 +112,7 @@ Plant generate_plant(Lsystem &lsystem, const Vec2 start, const std::string lstri
 }
 
 
-std::optional<double> _eval_expr(std::string &expr_string, Lsystem &lsystem, const double in_x) {
+std::optional<double> _eval_expr(std::string &expr_string, const double in_x) {
 	typedef double T; // numeric type (float, double, mpfr etc...)
 
 	typedef exprtk::symbol_table<T> symbol_table_t;
@@ -175,115 +149,6 @@ std::optional<double> _eval_expr(std::string &expr_string, Lsystem &lsystem, con
 	return (T)expr.value();
 }
 
-
-std::string _maybe_apply_rule(Lsystem &lsystem, const char symbol, const double *x_in) {
-	// if no value specified in braces, set fitting default
-	double x{};
-	if (x_in) {
-		x = *x_in;	
-	} else {
-		if (symbol == '+' || symbol  == '-') {
-			x = lsystem.standard_angle;
-		} else {
-			x = lsystem.standard_length;
-		}
-	}
-
-	// iterate rules
-	for (auto &rule : lsystem.rules) {
-		char rule_symbol = (lsystem.alphabet[rule.symbol_index])[0];
-		std::string condition = rule.condition;
-		std::string text = rule.text;
-
-		// if there is a rule with fitting symbol, check if condition is true
-		if (rule_symbol == symbol) {
-
-			// eval condition, and update FIELD_STATE based on outcome
-			if (auto result = _eval_expr(condition, lsystem, x)) {
-				if (util::equal_epsilon(result.value(), 1.0)) {
-					rule.condition_state = Lsystem::FIELD_STATE::TRUE;
-				} else {
-					rule.condition_state = Lsystem::FIELD_STATE::FALSE;
-				}
-			} else {
-				rule.condition_state = Lsystem::FIELD_STATE::ERROR;
-			}
-
-			// if condition is met, substitute rule for symbol, try eval all expr
-			if (rule.condition_state == Lsystem::FIELD_STATE::TRUE) {
-				std::string return_str = "";
-				int index = 0;
-
-				while (index < (int)text.size()) {
-					char c = text[index];
-					// check if c is expr -> eval
-
-					if (c == '<') {
-						// if expr_string valid, evaluate and add to return_string
-
-						if (auto result = _get_string_between_brackets(text, index)) {
-							std::string expr_string = result.value();
-							// set to 0.0 if expr cant eval fails
-							double expr_value = 
-								_eval_expr(expr_string, lsystem, x).value_or(0.0);
-							// add the brackets with the evaluated expr_string to return_string
-							return_str += fmt::format("<{}>", expr_value);
-							// move index to position after closing bracket
-							index += (int)expr_string.size() + 2;
-
-						// expr_string not valid
-						} else {
-							index++;
-						}
-
-					// add c to expr_string and inc index
-					} else {
-						return_str += c;
-						index++;
-					}
-				} // while end
-
-				return return_str;
-			}
-		}
-	}
-
-	// return the following if no rule could match
-	if (x) {
-		return fmt::format("{}<{}>", symbol, x);
-	} else {
-		return fmt::format("{}", symbol);
-	}
-}
-
-// execute this on parameter text change
-bool eval_parameters(Lsystem &lsystem) {
-	for (int i = 0; i < lsystem.n_parameters; i++) {
-		std::string parameter_string = lsystem.parameter_strings[i];
-		if (auto result = _eval_expr(parameter_string, lsystem, 0.0)) {
-			lsystem.parameters[i] = result.value();
-		} else {
-			return false;
-		}
-	}
-	return true;
-}
-
-// move this into lsystem, probalby start with only ever specifying x
-struct StandardArgs {
-	// angle +,-
-	float x = 40.0; // -> angle
-	
-	// move a,b,c,A,B,C
-	// float x = 50.0 -> len
-	// float y = 3.0 -> wd
-	
-	// and so on?
-};
-
-// QUESTION: first of all expand axiom and all rules with default parameters?
-// (symbol) -> get x, y, z as strings
-
 int parse_args(const std::string &args, std::string &x, std::string &y,
                      std::string &z) {
   int n_args = 1;
@@ -305,57 +170,13 @@ int parse_args(const std::string &args, std::string &x, std::string &y,
   return n_args;
 }
 
-// returns a snipped from index to c: [index,c[
-// if index >= str.size() -> empty string
-std::string get_substr(const std::string &str, const int index, const char c) {
-	int field_end = str.find(c, index);
-	std::string substr = "";
-	if (field_end != std::string::npos) {
-		substr = str.substr(index, field_end);
-	}
-	return substr;
-}
-
-int get_index_delta(const std::string &str, const int index, const char c) {
-	for (int new_index = index; new_index < (int)str.size(); new_index++) {
-		if (str[new_index] == c) {
-			return new_index - index;
-		}
-	}
-	return 0;
-}
-
-bool set_index_after(const std::string &str, int &index, const char c) {
-	for (int new_index = index; new_index < (int)str.size(); new_index++) {
-		if (str[new_index] == c) {
-			index = new_index + 1;
-			return true;
-		}
-	}
-	return false;
-}
-
-bool try_simple_op(const char op) {
+bool op_is_valid(const char op) {
 	return (op == '+' || op == '-' || op == '*' || op == '/');
 }
 
 bool try_block_match(const char op1, const char op2,
 														const std::string expr1, const std::string expr2) {
 	return (op1 == op2 && expr1 == expr2);
-}
-
-std::string trim(const std::string &s) {
-    size_t start = 0;
-    while (start < s.size() && s[start] == ' ') {
-        ++start;
-    }
-
-    size_t end = s.size();
-    while (end > start && s[end - 1] == ' ') {
-        --end;
-    }
-
-    return s.substr(start, end - start);
 }
 
 // parse block of type {} or [], n is optional for {}
@@ -376,8 +197,8 @@ bool parse_block(const std::string &block, char &op, std::string &expr, int *n) 
 	int field_end = block.find(',');
 
 	if (field_end == std::string::npos) { return false; }
-	std::string op_str = trim(block.substr(field_start, field_end - field_start));
-	if (try_simple_op(op_str[0])) {
+	std::string op_str = util::trim(block.substr(field_start, field_end - field_start));
+	if (op_is_valid(op_str[0])) {
 		op = op_str[0];
 	} else {
 		print_info("operator invalid");
@@ -500,13 +321,11 @@ std::string arg_rulearg_substitute(const std::string arg, const std::string rule
 	
 	// handle incomplete
 	if (rule_arg.size() == 0) {
-		print_info("rule_arg incomplete_1");
+		print_info("rule_arg incomplete");
 		return arg; 
 	};
-	assert(arg.size() > 0);
 
   std::string return_arg = "";
-
 	// rule_arg is of type scaling
   if (rule_arg[0] == '[') {
 		// append arg up until [ or end, then append rule_arg
@@ -651,7 +470,7 @@ std::string arg_rulearg_substitute(const std::string arg, const std::string rule
 // 1. rule substituted for symbol if rule applies
 // 2. symbol<args> if no rule applies
 // 3. symbol only if error
-std::string _maybe_apply_rule2(Lsystem &lsystem, const char symbol, const std::string args) {
+std::string _maybe_apply_rule(const char symbol, const std::string args) {
 	// __extract args__
 	std::string x = "";
 	std::string y = "";
@@ -678,245 +497,129 @@ std::string _maybe_apply_rule2(Lsystem &lsystem, const char symbol, const std::s
 		std::string condition = rule.condition;
 		std::string text = rule.text;
 
-		// check if there is a match for symbol and number of args
-		if (rule_symbol == symbol && rule.n_args == n_args) {
+		if (rule_symbol != symbol) { continue; }
+		if (rule.n_args != n_args) { continue; }
 
-			// TODO: check against condition
+		// TODO: check against condition
 
-			// if (auto result = _eval_expr(condition, lsystem, 1.0)) {
-			// 	if (util::equal_epsilon(result.value(), 1.0)) {
-			// 		rule.condition_state = Lsystem::FIELD_STATE::TRUE;
-			// 	} else {
-			// 		rule.condition_state = Lsystem::FIELD_STATE::FALSE;
-			// 	}
-			// } else {
-			// 	rule.condition_state = Lsystem::FIELD_STATE::ERROR;
-			// }
+		// if (auto result = _eval_expr(condition, 1.0)) {
+		// 	if (util::equal_epsilon(result.value(), 1.0)) {
+		// 		rule.condition_state = Lsystem::FIELD_STATE::TRUE;
+		// 	} else {
+		// 		rule.condition_state = Lsystem::FIELD_STATE::FALSE;
+		// 	}
+		// } else {
+		// 	rule.condition_state = Lsystem::FIELD_STATE::ERROR;
+		// }
 
-			rule.condition_state = Lsystem::FIELD_STATE::TRUE;
+		rule.condition_state = Lsystem::FIELD_STATE::TRUE;
+		if (rule.condition_state != Lsystem::FIELD_STATE::TRUE) { continue; }
 
-			// __match is found, apply rule__
-			if (rule.condition_state == Lsystem::FIELD_STATE::TRUE) {
-				std::string return_str = "";
-				int index = 0;
+		// __rule matched, substitute arg__
+		std::string return_str = "";
+		int index = 0;
+		while (index < (int)text.size()) {
+			if (text[index] == '<') {
+				// every arg block that is not of symbol is just copied
+				while (text[index] != '>') {
+					if (index >= (int)text.size()) {
+						print_info("rule block incomplete");
+						return fmt::format("{}", symbol);
+					}
+					return_str += text[index++];
+				}
+				return_str += text[index++];
+			} else if ( text[index] != symbol ) {
+				return_str += text[index++];
 
-				while (index < (int)text.size()) {
-					if (text[index] == '<') {
-						// every arg block that is not of symbol is just copied
-						while (text[index] != '>') {
-							if (index >= (int)text.size()) {
-								return fmt::format("{}", symbol);
-							}
-							return_str += text[index++];
-						}
-						return_str += text[index++];
-					} else if ( text[index] != symbol ) {
-						return_str += text[index++];
+			} else {
+				index++;
+				if (index >= (int)text.size()) {
+					// do nothing
+				} else {
+					if (text[index] != '<') {
+						return_str += symbol;
 					} else {
 						index++;
-						if (index >= (int)text.size()) {
-							// do nothing
+						std::string rule_symbol_args = util::get_substr(text, index, '>');
+						if (rule_symbol_args.size() == 0) {
+							print_info("rule block incomplete");
+							return fmt::format("{}", symbol);
 						} else {
-							if (text[index] != '<') {
-								return_str += symbol;
-							} else {
-								index++;
-								std::string rule_symbol_args = get_substr(text, index, '>');
-								if (rule_symbol_args.size() == 0) {
-									return fmt::format("{}", symbol);
-								} else {
-									index += rule_symbol_args.size() + 1;
+							index += rule_symbol_args.size() + 1;
 
-									// 1. extract rulesymbol x, y, z
-									std::string rule_x = "";
-									std::string rule_y = "";
-									std::string rule_z = "";
+							// 1. extract rulesymbol x, y, z
+							std::string rule_x = "";
+							std::string rule_y = "";
+							std::string rule_z = "";
 
-									parse_args(rule_symbol_args, rule_x, rule_y, rule_z);
+							parse_args(rule_symbol_args, rule_x, rule_y, rule_z);
 
-									std::string fin_x = arg_rulearg_substitute(x, rule_x);
-									std::string fin_y = ""; 
-									std::string fin_z = "";
+							std::string fin_x = "";
+							std::string fin_y = ""; 
+							std::string fin_z = "";
 
-									if (n_args > 1) {
-										fin_y = arg_rulearg_substitute(y, rule_y);
-									}
-									if (n_args > 2) {
-										fin_z = arg_rulearg_substitute(z, rule_z);
-									}
-								}
+							fin_x = arg_rulearg_substitute(x, rule_x);
+							return_str += '<';
+							return_str = fin_x;
+							if (n_args > 1) {
+								fin_y = arg_rulearg_substitute(y, rule_y);
+								return_str += fmt::format(";{}", fin_y);
 							}
+							if (n_args > 2) {
+								fin_z = arg_rulearg_substitute(z, rule_z);
+								return_str += fmt::format(";{}", fin_z);
+							}
+							return_str += '>';
 						}
 					}
-				} // while end
-			} // condition false
+				}
+			}
+		} // while end
+		return return_str;
+	}
+	return fmt::format("{}<{}>", symbol, args);
+}
 
 
+// does one iteration on the lstring
+std::string lstring_expand(std::string lstring) {
+  std::string lstring_expanded = "";
 
+	int index = 0;
+	while (index < lstring.size()) {
+		char c = lstring[index];
 
-
-
-
-
-						// if expr_string valid, evaluate and add to return_string
-
-						if (auto result = _get_string_between_brackets(text, index)) {
-							std::string expr_string = result.value();
-							// set to 0.0 if expr cant eval fails
-							double expr_value = 
-								_eval_expr(expr_string, lsystem, 1.0).value_or(0.0);
-							// add the brackets with the evaluated expr_string to return_string
-							return_str += fmt::format("<{}>", expr_value);
-							// move index to position after closing bracket
-							index += (int)expr_string.size() + 2;
-
-						// expr_string not valid
-						} else {
-							index++;
-						}
-
-					// add c to expr_string and inc index
-					} else {
-						return_str += c;
-						index++;
-					}
-				} // while end
-
-				return return_str;
+		// some symbols can just be copied directly
+		if (c == '[' || c == ']') {
+			lstring_expanded += lstring[index++];
+		} else {
+			if (index + 1 >= lstring.size()) {
+				lstring_expanded += _maybe_apply_rule(lstring[index], "");
+				return lstring_expanded;
+			} else if (lstring[index + 1] != '<') {
+				lstring_expanded += _maybe_apply_rule(lstring[index++], "");
+			} else {
+				index += 2; // move to after '<'
+				std::string args = util::get_substr(lstring, index, '>');
+				if (args.empty()) {
+					print_info("lstring invalid");
+					return "";
+				} else {
+					lstring_expanded += _maybe_apply_rule(c, args);
+					index += args.size() + 1; // move to after '>'
+				}
 			}
 		}
 	}
-
-	// return the following if no rule could match
-	if (x) {
-		return fmt::format("{}<{}>", symbol, x);
-	} else {
-		return fmt::format("{}", symbol);
-	}
-
-
-	return fmt::format("{}", symbol);
+	return lstring_expanded;
 }
 
-
-
-std::string generate_lstring2(Lsystem &lsystem) {
-	std::string lstring_expanded;
-	std::string lstring = lsystem.axiom.text;
+std::string generate_lstring() {
+	std::string lstring = "";
 	for (int i = 0; i < lsystem.iterations; i++) {
-		lstring_expanded = "";
-		int index = 0;
-		while (index < (int)lstring.size()) {
-			char c = lstring[index];
-
-			// some symbols can just be copied directly
-			if (c == '[' || c == ']') {
-				lstring_expanded += c;
-				index++;
-			} else {
-
-				// check c is the last character in the string
-				int index_next = index + 1;
-				if (index_next < (int)lstring.size()) {
-
-					// check if the next character is an open bracket
-					if (lstring[index_next] == '<') {
-						if (auto result = _get_string_between_brackets(lstring, index_next)) {
-							std::string expr_string = result.value();
-							// why call _eval_expr with 0.0 here?
-							double x = 0.0;
-							if (c == '+' || c == '-') {
-								x = lsystem.standard_angle;
-							} else {
-								x = lsystem.standard_length;
-							}
-							double expr_value =
-								_eval_expr(expr_string, lsystem, x).value_or(0.0);
-
-							lstring_expanded += _maybe_apply_rule(lsystem, c, &expr_value);
-							// move index to position after closing bracket
-							index += (int)expr_string.size() + 3;
-						} else {
-							lstring_expanded += _maybe_apply_rule(lsystem, c, nullptr);
-							index++;
-						}
-
-					} else {
-						lstring_expanded += _maybe_apply_rule(lsystem, c, nullptr);
-						index++;
-					}
-
-				// end reached
-				} else {
-					lstring_expanded += _maybe_apply_rule(lsystem, c, nullptr);
-					index++;
-				}
-
-			}
-
-
-
-		} // end while
-	} // end for
-	return "";
-}
-
-std::string generate_lstring(Lsystem &lsystem) {
-	std::string lstring_expanded;
-	std::string lstring = lsystem.axiom.text;
-	// for (int i = 0; i < lsystem.iterations; i++) {
-	// 	lstring_expanded = "";
-	// 	int index = 0;
-	// 	while (index < (int)lstring.size()) {
-	// 		char c = lstring[index];
-	//
-	// 		// if stack symbol -> copy and continue
-	// 		if (c == '[' || c == ']') {
-	// 			lstring_expanded += c;
-	// 			index++;
-	// 		} else {
-	//
-	// 			// check c is the last character in the string
-	// 			int index_next = index + 1;
-	// 			if (index_next < (int)lstring.size()) {
-	//
-	// 				// check if the next character is an open bracket
-	// 				if (lstring[index_next] == '<') {
-	// 					if (auto result = _get_string_between_brackets(lstring, index_next)) {
-	// 						std::string expr_string = result.value();
-	// 						// why call _eval_expr with 0.0 here?
-	// 						double x = 0.0;
-	// 						if (c == '+' || c == '-') {
-	// 							x = lsystem.standard_angle;
-	// 						} else {
-	// 							x = lsystem.standard_length;
-	// 						}
-	// 						double expr_value =
-	// 							_eval_expr(expr_string, lsystem, x).value_or(0.0);
-	//
-	// 						lstring_expanded += _maybe_apply_rule(lsystem, c, &expr_value);
-	// 						// move index to position after closing bracket
-	// 						index += (int)expr_string.size() + 3;
-	// 					} else {
-	// 						lstring_expanded += _maybe_apply_rule(lsystem, c, nullptr);
-	// 						index++;
-	// 					}
-	//
-	// 				} else {
-	// 					lstring_expanded += _maybe_apply_rule(lsystem, c, nullptr);
-	// 					index++;
-	// 				}
-	//
-	// 			// end reached
-	// 			} else {
-	// 				lstring_expanded += _maybe_apply_rule(lsystem, c, nullptr);
-	// 				index++;
-	// 			}
-	//
-	// 		}
-	// 	}
-	// 	lstring = lstring_expanded;
-	// }
+		lstring = lstring_expand(lstring);		
+	}
 	return lstring;
 }
 
@@ -1000,4 +703,4 @@ std::optional<std::vector<std::string>> scan_saves() {
 		return {};
 	}
 }
-} // namespace lsystem
+} // namespace ls

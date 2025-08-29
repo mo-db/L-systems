@@ -34,6 +34,8 @@ struct Plant {
 };
 
 
+
+namespace ls {
 struct Lsystem {
 	bool live = true;
 	int iterations = 1;
@@ -75,36 +77,45 @@ struct Lsystem {
 	std::array<Rule, max_rules> rules;
 };
 
-namespace lsystem {
+inline Lsystem lsystem;
+
+
+
+
+
+
 // generate plant from lstring
 
-std::optional<std::string> _get_string_between_brackets(std::string in_string, const int index);
-std::optional<double> _eval_expr(std::string &expr_string, Lsystem &lsystem,
-                                 const double in_x);
+std::optional<double> _eval_expr(std::string &expr_string, const double in_x);
 Vec2 _calculate_move(Turtle &turtle, const double length);
 void _turn(Turtle &turtle, const double angle);
-void _turtle_action(Plant &plant, Lsystem &lsystem, const char c,
-                    const double *value);
-Plant generate_plant(Lsystem &lsystem, const Vec2 start,
-                                    const std::string lstring);
+void _turtle_action(Plant &plant, const char c, const double *value);
+Plant generate_plant(const Vec2 start, const std::string lstring);
 
 // generate the complete lstring from axiom and rules
-std::string _maybe_apply_rule(Lsystem &lsystem, const char symbol,
-                              const double *x_in);
-std::string generate_lstring(Lsystem &lsystem);
 
-// TODO: convert a plant into an lstring
-// std::string assemble_lstring_part(Plant &plant);
 
-bool eval_parameters(Lsystem &lsystem);
 
-// save a rule in the $PROJ_ROOT/save folder
+// serializing
 bool save_rule_as_file(Lsystem::Rule &rule, const std::string &save_file_name);
 bool load_rule_from_file(Lsystem::Rule &rule, std::string &save_file_name);
 std::optional<std::vector<std::string>> scan_saves();
 
-
-
+// new lstring generation
+bool op_is_valid(const char op);
+bool try_block_match(const char op1, const char op2,
+														const std::string expr1, const std::string expr2);
+int parse_args(const std::string &args, std::string &x, std::string &y,
+                     std::string &z);
+bool parse_block(const std::string &block, char &op, std::string &expr, int *n);
+bool parse_arg(const std::string arg, std::string &base, std::string &pattern,
+							 std::vector<std::string> &repeats, std::string & scale);
 std::string subst_arg(const std::string arg, const std::string rule_arg);
 
+std::string _maybe_apply_rule(const char symbol, const std::string args);
+std::string generate_lstring(Lsystem &lsystem);
+
+// into util
+std::string get_substr(const std::string &str, const int index, const char c);
+std::string trim(const std::string &s);
 } // namespace lsystem
