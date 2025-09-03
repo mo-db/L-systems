@@ -1,7 +1,7 @@
 #include "lsystem.hpp"
 #include "core.hpp"
 
-namespace ls {
+namespace lm {
 Vec2 _calculate_move(Turtle &turtle, const double length) {
 	Vec2 position = *turtle.node;
 	position.x += length * cos(turtle.angle);
@@ -25,7 +25,7 @@ void _turtle_action(Plant &plant, const char c, const double *value) {
 		if (value) {
 			x = *value;
 		} else {
-			x = lsystem.standard_length;
+			x = system.standard_length;
 		}
 
 		// check nodes limit
@@ -44,7 +44,7 @@ void _turtle_action(Plant &plant, const char c, const double *value) {
 		if (value) {
 			x = *value;	
 		} else {
-			x = lsystem.standard_angle;
+			x = system.standard_angle;
 		}
     _turn(turtle, -x);
 	}
@@ -54,7 +54,7 @@ void _turtle_action(Plant &plant, const char c, const double *value) {
 		if (value) {
 			x = *value;	
 		} else {
-			x = lsystem.standard_angle;
+			x = system.standard_angle;
 		}
     _turn(turtle, x);
 	}
@@ -122,10 +122,10 @@ std::optional<double> _eval_expr(std::string &expr_string, const double in_x) {
 	T x = T(in_x);
 	// T y = T(in_y);
 	// T z = T(in_z);
-	T l = T(lsystem.parameters[0]);
-	T m = T(lsystem.parameters[1]);
-	T n = T(lsystem.parameters[2]);
-	T o = T(lsystem.parameters[3]);
+	T l = T(system.parameters[0]);
+	T m = T(system.parameters[1]);
+	T n = T(system.parameters[2]);
+	T o = T(system.parameters[3]);
 	// all others
 
 	symbol_table_t symbol_table;
@@ -483,7 +483,7 @@ std::string _maybe_apply_rule(const char symbol, const std::string args) {
 	}
 
 	// __try to match a rule__
-	for (auto &rule : lsystem.rules) {
+	for (auto &rule : system.rules) {
 		// Matching phase:
 		// 2. test if there is a matching symbol
 		// -> 3. then test if the number of args matches
@@ -493,7 +493,7 @@ std::string _maybe_apply_rule(const char symbol, const std::string args) {
 		// check symbol, check args present, check args condition
 		// -> implement later... check context, check environmental conditions
 		// why isnt this just a char array?
-		char rule_symbol = (lsystem.alphabet[rule.symbol_index])[0];
+		char rule_symbol = (system.alphabet[rule.symbol_index])[0];
 		std::string condition = rule.condition;
 		std::string text = rule.text;
 
@@ -512,8 +512,8 @@ std::string _maybe_apply_rule(const char symbol, const std::string args) {
 		// 	rule.condition_state = Lsystem::FIELD_STATE::ERROR;
 		// }
 
-		rule.condition_state = Lsystem::FIELD_STATE::TRUE;
-		if (rule.condition_state != Lsystem::FIELD_STATE::TRUE) { continue; }
+		rule.condition_state = util::STATE::TRUE;
+		if (rule.condition_state != util::STATE::TRUE) { continue; }
 
 		// __rule matched, substitute arg__
 		std::string return_str = "";
@@ -578,12 +578,16 @@ std::string _maybe_apply_rule(const char symbol, const std::string args) {
 		} // while end
 		return return_str;
 	}
-	return fmt::format("{}<{}>", symbol, args);
+	if (args.empty()) {
+		return fmt::format("{}", symbol);
+	} else {
+		return fmt::format("{}<{}>", symbol, args);
+	}
 }
 
 
 // does one iteration on the lstring
-std::string lstring_expand(std::string lstring) {
+std::string expand(std::string lstring) {
   std::string lstring_expanded = "";
 
 	int index = 0;
@@ -617,14 +621,14 @@ std::string lstring_expand(std::string lstring) {
 
 std::string generate_lstring() {
 	std::string lstring = "";
-	for (int i = 0; i < lsystem.iterations; i++) {
-		lstring = lstring_expand(lstring);		
+	for (int i = 0; i < system.iterations; i++) {
+		lstring = expand(lstring);		
 	}
 	return lstring;
 }
 
 // TODO serialize lsystem
-bool save_rule_as_file(Lsystem::Rule &rule, const std::string &save_file_name) {
+bool save_rule_as_file(System::Rule &rule, const std::string &save_file_name) {
 	std::string save_file_full_path = app::context.save_path + '/' + save_file_name;
 
 	fmt::print("save file: {}\n", save_file_full_path);
@@ -655,7 +659,7 @@ bool save_rule_as_file(Lsystem::Rule &rule, const std::string &save_file_name) {
 
 
 // TODO load lsystem from file
-bool load_rule_from_file(Lsystem::Rule &rule, std::string &save_file_name) {
+bool load_rule_from_file(System::Rule &rule, std::string &save_file_name) {
 	std::string save_file = app::context.save_path + '/' + save_file_name;
 
 	FILE* fp = std::fopen(save_file.c_str(), "r");

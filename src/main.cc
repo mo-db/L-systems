@@ -2,13 +2,14 @@
 #include "app.hpp"
 #include "graphics.hpp"
 #include "rasterize.hpp"
-#include "modules.hpp"
+// #include "modules.hpp"
+#include "lsystem.hpp"
 #include <lo/lo.h>
 
 
 void process_events();
 void lock_frame_buf();
-bool update_gui(Modules &modules);
+bool update_gui();
 void render();
 void cleanup();
 
@@ -37,17 +38,14 @@ int main(int argc, char *argv[]) {
 	app::gui.show_window_b = true;
 	app::gui.show_window_c = true;
 
-	Modules modules;
-	Lsystem &lsystem = modules.lsystem;
-
 	int accum = 0;
 	while(app::context.keep_running) {
 		process_events();
 		lock_frame_buf();
 
 		// calculate axiom and rule lstrings
-		// lsystem.axiom.plant = lsystem::generate_plant(modules.lsystem, Vec2{(double)app::video.width * 0.3, (double)app::video.height - 100.0},
-		// 		lsystem.axiom.text);
+		// lm::system.axiom.plant = lm::generate_plant(modules.lsystem, Vec2{(double)app::video.width * 0.3, (double)app::video.height - 100.0},
+		// 		lm::system.axiom.text);
 
 		// INFO dont to at the moment
 		// calculate the lstring, every 30 frames
@@ -55,22 +53,23 @@ int main(int argc, char *argv[]) {
 		if(accum == -1) {
 			// the following should instead trigger if some parameter text changes
 			// do something with the result?
-			if (!lsystem::eval_parameters(lsystem)) {
-				puts("eval failed for some parameter");
-			}
+			// TODO this does not work anymore, function removed
+			// if (!lm::eval_parameters(lsystem)) {
+			// 	puts("eval failed for some parameter");
+			// }
 
-			lsystem.lstring = lsystem::generate_lstring(modules.lsystem);
-			lsystem.plant = lsystem::generate_plant(modules.lsystem, Vec2{(double)app::video.width * 0.7, (double)app::video.height - 100.0},
-					lsystem.lstring);
+		// 	lm::system.lstring = lm::generate_lstring(modules.lsystem);
+		// 	lm::system.plant = lm::generate_plant(modules.lsystem, Vec2{(double)app::video.width * 0.7, (double)app::video.height - 100.0},
+		// 			lm::system.lstring);
 		}
 
 
 
-		// if (lsystem.live) {
-		// 	for (auto &branch : lsystem.plant.branches) {
+		// if (lm::system.live) {
+		// 	for (auto &branch : lm::system.plant.branches) {
 		// 		draw::wide_line(draw::FrameBuf{(uint32_t*)app::video.frame_buf,
 		// 				app::video.width, app::video.height}, 
-		// 				Line2{*branch.n1, *branch.n2}, color::fg, lsystem.standard_wd);
+		// 				Line2{*branch.n1, *branch.n2}, color::fg, lm::system.standard_wd);
 		// 	}
 		// }
 
@@ -78,7 +77,7 @@ int main(int argc, char *argv[]) {
 		// draw::thick_line({{200, 400}, {600, 700}}, color::fg, 40.0);
 		// draw::thick_line_mesh({{200, 400}, app::input.mouse}, color::fg, 40.0);
 
-		if (!update_gui(modules)) {
+		if (!update_gui()) {
 			return 1;
 		}
 
@@ -184,9 +183,7 @@ void process_events() {
 		}
 	}
 }
-bool update_gui(Modules &modules) {
-  auto &lsystem = modules.lsystem;
-
+bool update_gui() {
   ImGui_ImplSDLRenderer3_NewFrame();
   ImGui_ImplSDL3_NewFrame();
   ImGui::NewFrame();
@@ -205,8 +202,8 @@ bool update_gui(Modules &modules) {
     ImGui::Checkbox("Demo Window", &app::gui.show_window_a);
     ImGui::Checkbox("Another Window", &app::gui.show_window_b);
 
-    ImGui::SliderInt("iterations", &modules.lsystem.iterations, 0, 6);
-    ImGui::SliderFloat("float", &modules.lsystem.standard_length, 0.0, 100.0);
+    ImGui::SliderInt("iterations", &lm::system.iterations, 0, 6);
+    ImGui::SliderFloat("float", &lm::system.standard_length, 0.0, 100.0);
 
     if (ImGui::Button("Button"))
       counter++;
@@ -238,21 +235,39 @@ bool update_gui(Modules &modules) {
 
       // __PARAMETERS___
       if (ImGui::TreeNode("Parameters")) {
-				for (int i = 0; i < lsystem.n_parameters; i++) {
+				for (int i = 0; i < lm::system.n_parameters; i++) {
 					std::string label = fmt::format("Parameter {}\n", i);
-        	ImGui::InputText(label.c_str(), lsystem.parameter_strings[i], lsystem.text_size);
+        	ImGui::InputText(label.c_str(), lm::system.parameter_strings[i], lm::system.text_size);
 				}
         ImGui::TreePop();
       }
 
+			// new part!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+			if (ImGui::Button("Generate L-String")) {
+				lm::generate_lstring();
+			}
+			if (ImGui::Button("L-String Expand")) {
+				if (lm::system.current_iteration == 0) {
+					lm::lstring = lm::expand(lm::system.axiom);
+				} else {
+					lm::lstring = lm::expand(lm::lstring);
+				}
+				lm::system.current_iteration++;
+			}
+
+			if (ImGui::Button("L-String Clear")) {
+				lm::system.current_iteration = 0;
+				lm::lstring.clear();
+			}
+
       // ___AXIOM___
       if (ImGui::TreeNode("Axiom")) {
-        ImGui::InputText("text", lsystem.axiom.text, lsystem.text_size);
+        ImGui::InputText("text", lm::system.axiom, app::gui.textfield_size);
         ImGui::TreePop();
       }
 
 			// ___RULES___
-      for (int i = 0; i < lsystem.max_rules; i++) {
+      for (int i = 0; i < lm::system.max_rules; i++) {
         std::string label = fmt::format("Rule {}", i + 1);
 
         if (ImGui::TreeNode(label.c_str())) {
@@ -260,7 +275,7 @@ bool update_gui(Modules &modules) {
 					// TODO i should instead save and restore all text fields in file
 					// ___SAVE_FILES_COMBO___
 					static std::vector<std::string> save_file_names;
-					if (auto result = lsystem::scan_saves()) {
+					if (auto result = lm::scan_saves()) {
 						save_file_names = result.value();
 					}
 
@@ -279,7 +294,7 @@ bool update_gui(Modules &modules) {
               if (ImGui::Selectable(save_file_names[n].c_str(), is_selected)) {
 								// execute if gui drop down field is selected
                 save_fname_index = n;
-								if (!lsystem::load_rule_from_file(lsystem.rules[i],
+								if (!lm::load_rule_from_file(lm::system.rules[i],
 											save_file_names[save_fname_index])) {
 									std::puts("fail, rule couldnt be loaded");
 								}
@@ -296,12 +311,12 @@ bool update_gui(Modules &modules) {
 					// ___SYMBOL_SELECTION_COMNO___
           static ImGuiComboFlags flags = 0;
           const char *combo_preview_value =
-              lsystem.alphabet[lsystem.rules[i].symbol_index];
+              lm::system.alphabet[lm::system.rules[i].symbol_index];
           if (ImGui::BeginCombo("symbol", combo_preview_value, flags)) {
-            for (int n = 0; n < lsystem.alphabet_size; n++) {
-              const bool is_selected = (lsystem.rules[i].symbol_index == n);
-              if (ImGui::Selectable(lsystem.alphabet[n], is_selected))
-                lsystem.rules[i].symbol_index = n;
+            for (int n = 0; n < lm::system.alphabet_size; n++) {
+              const bool is_selected = (lm::system.rules[i].symbol_index == n);
+              if (ImGui::Selectable(lm::system.alphabet[n], is_selected))
+                lm::system.rules[i].symbol_index = n;
 
               // Set the initial focus when opening the combo (scrolling +
               // keyboard navigation focus)
@@ -312,30 +327,30 @@ bool update_gui(Modules &modules) {
           }
 
 					// num args
-					ImGui::RadioButton("1", &lsystem.rules[i].n_args, 1); ImGui::SameLine();
-					ImGui::RadioButton("2", &lsystem.rules[i].n_args, 2); ImGui::SameLine();
-					ImGui::RadioButton("3", &lsystem.rules[i].n_args, 3);
-					// fmt::print("rule{}, args: {}\n", i, lsystem.rules[i].n_args);
+					ImGui::RadioButton("1", &lm::system.rules[i].n_args, 1); ImGui::SameLine();
+					ImGui::RadioButton("2", &lm::system.rules[i].n_args, 2); ImGui::SameLine();
+					ImGui::RadioButton("3", &lm::system.rules[i].n_args, 3);
+					// fmt::print("rule{}, args: {}\n", i, lm::system.rules[i].n_args);
 
 
 					// change color based on conditon value
 					bool color_pushed = false;
-					if (lsystem.rules[i].condition_state == Lsystem::FIELD_STATE::ERROR) {
+					if (lm::system.rules[i].condition_state == util::STATE::ERROR) {
 						ImGui::PushStyleColor(ImGuiCol_Text, (ImVec4)ImColor::HSV(0.0f, 1.0f, 1.0f));
 						color_pushed = true;
-					} else if (lsystem.rules[i].condition_state == Lsystem::FIELD_STATE::TRUE) {
+					} else if (lm::system.rules[i].condition_state == util::STATE::TRUE) {
 						color_pushed = true;
 						ImGui::PushStyleColor(ImGuiCol_Text, (ImVec4)ImColor::HSV(0.3f, 1.0f, 1.0f));
 					}
 
 
 					// display condition and text
-					ImGui::InputText("condition", lsystem.rules[i].condition,
-													 lsystem.text_size);
+					ImGui::InputText("condition", lm::system.rules[i].condition,
+													 lm::system.text_size);
 					if (color_pushed) {
 						ImGui::PopStyleColor();
 					}
-          ImGui::InputText("text", lsystem.rules[i].text, lsystem.text_size);
+          ImGui::InputText("text", lm::system.rules[i].text, lm::system.text_size);
 
 					// a button ?
           if (ImGui::Button("Button")) {
@@ -348,15 +363,15 @@ bool update_gui(Modules &modules) {
           ImGui::InputText("arg", arg, 512);
           ImGui::InputText("rule_arg", rule_arg, 512);
           if (ImGui::Button("Parse arg")) {
-						std::string new_arg = lsystem::subst_arg(arg, rule_arg);
+						std::string new_arg = lm::arg_rulearg_substitute(arg, rule_arg);
 						std::cout << new_arg << std::endl;
           }
 
           if (ImGui::Button("Print L-string")) {
-						fmt::print("L-string: {}\n", lsystem.lstring);
+						fmt::print("L-string: {}\n", lm::lstring);
           }
 
-					ImGui::SliderFloat("wd", &lsystem.standard_wd, 1.0f, 50.0f);
+					ImGui::SliderFloat("wd", &lm::system.standard_wd, 1.0f, 50.0f);
 
           // ___SAVE_RULE___
 					// this works
@@ -365,7 +380,7 @@ bool update_gui(Modules &modules) {
           ImGui::InputText("save_file", save_file_name, text_size);
 					if (ImGui::Button("Save As")) {
 						if (std::strlen(save_file_name) > 0) {
-							if (!lsystem::save_rule_as_file(lsystem.rules[i], save_file_name)) {
+							if (!lm::save_rule_as_file(lm::system.rules[i], save_file_name)) {
 								puts("Rule saving failed, no file was created!");
 							}
 						}
@@ -375,15 +390,15 @@ bool update_gui(Modules &modules) {
       }
 
 
-			ImGui::Text("nodes: %d", modules.lsystem.plant.node_counter);
-			ImGui::Checkbox("live Preview", &lsystem.live);
+			ImGui::Text("nodes: %d", lm::system.plant.node_counter);
+			ImGui::Checkbox("live Preview", &lm::system.live);
 			if (ImGui::Button("render")) {
 
 				auto t1 = std::chrono::high_resolution_clock::now();
-				for (auto &branch : lsystem.plant.branches) {
+				for (auto &branch : lm::system.plant.branches) {
 					draw::wide_line(draw::FrameBuf{(uint32_t*)app::video.frame_buf,
 							app::video.width, app::video.height}, 
-							Line2{*branch.n1, *branch.n2}, color::fg, lsystem.standard_wd);
+							Line2{*branch.n1, *branch.n2}, color::fg, lm::system.standard_wd);
 				}
 				auto t2 = std::chrono::high_resolution_clock::now();
 				std::chrono::duration<double, std::milli> dt_ms = t2 - t1;
@@ -391,10 +406,10 @@ bool update_gui(Modules &modules) {
 			}
 
 			// variables
-			ImGui::SliderInt("iterations", &modules.lsystem.iterations, 0, 12);
-			ImGui::SliderFloat("length", &modules.lsystem.standard_length, 0.0, 200.0);
-			ImGui::SliderFloat("angle", &modules.lsystem.standard_angle, 0.0, gk::pi * 2.0);
-			ImGui::SliderInt("seg_count", &modules.lsystem.standard_branch_seg_count, 1, 50);
+			ImGui::SliderInt("iterations", &lm::system.iterations, 0, 12);
+			ImGui::SliderFloat("length", &lm::system.standard_length, 0.0, 200.0);
+			ImGui::SliderFloat("angle", &lm::system.standard_angle, 0.0, gk::pi * 2.0);
+			ImGui::SliderInt("seg_count", &lm::system.standard_branch_seg_count, 1, 50);
 
 
 			if (ImGui::Button("send osc")) {
@@ -408,16 +423,15 @@ bool update_gui(Modules &modules) {
 				int height = 480;
 				SDL_Surface *frame_surf = SDL_CreateSurface(width, height, SDL_PIXELFORMAT_RGBA32);
 				for (int i = 0; i < frames; i ++) {
-					lsystem.standard_angle -= 0.003;
+					lm::system.standard_angle -= 0.003;
         	SDL_FillSurfaceRect(frame_surf, nullptr, 0xFF000000);
-					lsystem.lstring = lsystem::generate_lstring(modules.lsystem);
-					lsystem.plant = lsystem::generate_plant(modules.lsystem,
-							Vec2{(double)width * 0.5,
-							(double)height * 0.9}, lsystem.lstring);
-					for (auto &branch : lsystem.plant.branches) {
+					lm::lstring = lm::generate_lstring();
+					lm::system.plant = lm::generate_plant(Vec2{(double)width * 0.5,
+							(double)height * 0.9}, "placeholder");
+					for (auto &branch : lm::system.plant.branches) {
 						draw::wide_line(draw::FrameBuf{(uint32_t*)frame_surf->pixels,
 								frame_surf->w, frame_surf->h}, 
-								Line2{*branch.n1, *branch.n2}, 0xFFFF00FF, lsystem.standard_wd);
+								Line2{*branch.n1, *branch.n2}, 0xFFFF00FF, lm::system.standard_wd);
 					}
 
 					fmt::print("{}/frame{:06}\n", app::context.render_path, i);

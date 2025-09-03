@@ -82,6 +82,11 @@ constexpr uint32_t hl_tertiary =		magenta;
 } // namespace color
 
 namespace util {
+enum class STATE {
+	TRUE,
+	FALSE,
+	ERROR,
+};
 inline void toggle(bool &b) { 
 	b = !b;
 }

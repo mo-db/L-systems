@@ -4,6 +4,8 @@
 #include "app.hpp"
 #include "graphics.hpp"
 
+// lindenmayer-system
+namespace lm {
 struct Branch {
 	Vec2 *n1 = nullptr;
 	Vec2 *n2 = nullptr;
@@ -33,12 +35,10 @@ struct Plant {
 	std::vector<Turtle> turtle_stack;
 };
 
-
-
-namespace ls {
-struct Lsystem {
+struct System {
 	bool live = true;
 	int iterations = 1;
+	int current_iteration = 0;
 	float standard_length = 50.0;
 	float standard_angle = gk::pi / 2.0;
 	float standard_wd = 1.0;
@@ -53,36 +53,24 @@ struct Lsystem {
 	std::array<double, n_parameters> parameters;
 
 	Plant plant{};
-	std::string lstring = "";
+	// std::string lstring = "";
 
 	// A-K
   const char *alphabet[alphabet_size] = { "A", "a", "B", "b", "+", "-" };
-	enum class FIELD_STATE {
-		TRUE,
-		FALSE,
-		ERROR,
-	};
-	struct Axiom {
-		char text[text_size] = "";
-		Plant plant;
-	} axiom;
+
+	char axiom[app::gui.textfield_size] = "";
 	struct Rule {
 		int symbol_index = 0;
 		int n_args = 1;
 		char condition[text_size] = "0.0";
-		FIELD_STATE condition_state = FIELD_STATE::FALSE;
+		util::STATE condition_state = util::STATE::FALSE;
 		char text[text_size] = "";
 		Plant plant{};
 	};
 	std::array<Rule, max_rules> rules;
 };
-
-inline Lsystem lsystem;
-
-
-
-
-
+inline System system;
+inline std::string lstring = "";
 
 // generate plant from lstring
 
@@ -97,8 +85,8 @@ Plant generate_plant(const Vec2 start, const std::string lstring);
 
 
 // serializing
-bool save_rule_as_file(Lsystem::Rule &rule, const std::string &save_file_name);
-bool load_rule_from_file(Lsystem::Rule &rule, std::string &save_file_name);
+bool save_rule_as_file(System::Rule &rule, const std::string &save_file_name);
+bool load_rule_from_file(System::Rule &rule, std::string &save_file_name);
 std::optional<std::vector<std::string>> scan_saves();
 
 // new lstring generation
@@ -110,10 +98,11 @@ int parse_args(const std::string &args, std::string &x, std::string &y,
 bool parse_block(const std::string &block, char &op, std::string &expr, int *n);
 bool parse_arg(const std::string arg, std::string &base, std::string &pattern,
 							 std::vector<std::string> &repeats, std::string & scale);
-std::string subst_arg(const std::string arg, const std::string rule_arg);
+std::string arg_rulearg_substitute(const std::string arg, const std::string rule_arg);
 
 std::string _maybe_apply_rule(const char symbol, const std::string args);
-std::string generate_lstring(Lsystem &lsystem);
+std::string generate_lstring();
+std::string expand(std::string lstring);
 
 // into util
 std::string get_substr(const std::string &str, const int index, const char c);

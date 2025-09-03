@@ -5,7 +5,7 @@
 #include "lsystem.hpp"
 
 struct Modules {
-	Lsystem lsystem{};
-	Turtle turtle{};
-	std::vector<Turtle> turtle_stack;
+	lm::System lsystem{};
+	lm::Turtle turtle{};
+	std::vector<lm::Turtle> turtle_stack;
 };
