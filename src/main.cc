@@ -6,7 +6,6 @@
 #include "lsystem.hpp"
 #include <lo/lo.h>
 
-
 void process_events();
 void lock_frame_buf();
 bool update_gui();
@@ -76,6 +75,13 @@ int main(int argc, char *argv[]) {
 
 		// draw::thick_line({{200, 400}, {600, 700}}, color::fg, 40.0);
 		// draw::thick_line_mesh({{200, 400}, app::input.mouse}, color::fg, 40.0);
+
+		// draw plant
+		for (auto &branch : lm::system.plant.branches) {
+			draw::wide_line(draw::FrameBuf{(uint32_t*)app::video.frame_buf,
+					app::video.width, app::video.height}, 
+					Line2{*branch.n1, *branch.n2}, color::fg, lm::system.standard_wd);
+		}
 
 		if (!update_gui()) {
 			return 1;
@@ -259,6 +265,13 @@ bool update_gui() {
 				lm::system.current_iteration = 0;
 				lm::lstring.clear();
 			}
+
+			if (ImGui::Button("Generate Plant")) {
+				lm::system.plant = 
+					lm::generate_plant(Vec2{(double)app::video.width/2, app::video.height - 50.0}, lm::lstring);
+
+			}
+
 
       // ___AXIOM___
       if (ImGui::TreeNode("Axiom")) {

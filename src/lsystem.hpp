@@ -6,6 +6,14 @@
 
 // lindenmayer-system
 namespace lm {
+
+struct Args {
+	std::string x, y, z;
+    constexpr std::string& operator[](std::size_t i) noexcept {
+        return (i==0 ? x : (i==1 ? y : z));
+    }
+};
+
 struct Branch {
 	Vec2 *n1 = nullptr;
 	Vec2 *n2 = nullptr;
@@ -72,9 +80,13 @@ struct System {
 inline System system;
 inline std::string lstring = "";
 
+
+
 // generate plant from lstring
 
-std::optional<double> _eval_expr(std::string &expr_string, const double in_x);
+// std::optional<double> _eval_expr(std::string &expr_string, const double in_x);
+std::optional<double> _eval_expr(std::string &expr_string, double *x,
+																 double *y, double *z);
 Vec2 _calculate_move(Turtle &turtle, const double length);
 void _turn(Turtle &turtle, const double angle);
 void _turtle_action(Plant &plant, const char c, const double *value);
@@ -95,6 +107,7 @@ bool try_block_match(const char op1, const char op2,
 														const std::string expr1, const std::string expr2);
 int parse_args(const std::string &args, std::string &x, std::string &y,
                      std::string &z);
+int parse_args2(const std::string &args_str, Args &args);
 bool parse_block(const std::string &block, char &op, std::string &expr, int *n);
 bool parse_arg(const std::string arg, std::string &base, std::string &pattern,
 							 std::vector<std::string> &repeats, std::string & scale);
@@ -103,6 +116,11 @@ std::string arg_rulearg_substitute(const std::string arg, const std::string rule
 std::string _maybe_apply_rule(const char symbol, const std::string args);
 std::string generate_lstring();
 std::string expand(std::string lstring);
+
+// calculate x,y,z args for a symbol, if x = 0.0 -> error, y,z default to 0.0
+std::array<double, 3> symbol_eval_args(const char symbol, const std::string &args);
+
+std::optional<double> get_default(const char symbol);
 
 // into util
 std::string get_substr(const std::string &str, const int index, const char c);
