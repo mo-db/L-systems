@@ -82,6 +82,11 @@ constexpr uint32_t hl_tertiary =		magenta;
 } // namespace color
 
 namespace util {
+// time helper
+using Clock = std::chrono::steady_clock;
+using TimePoint = std::chrono::time_point<Clock>;
+using ms = std::chrono::duration<double, std::milli>;
+
 enum class STATE {
 	TRUE,
 	FALSE,

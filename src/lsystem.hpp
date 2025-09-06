@@ -91,6 +91,8 @@ Vec2 _calculate_move(Turtle &turtle, const double length);
 void _turn(Turtle &turtle, const double angle);
 void _turtle_action(Plant &plant, const char c, const double *value);
 Plant generate_plant(const Vec2 start, const std::string lstring);
+bool generate_plant_timed(const Vec2 start, const std::string &lstring, Plant &plant, 
+		int &current_index);
 
 // generate the complete lstring from axiom and rules
 

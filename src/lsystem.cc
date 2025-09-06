@@ -82,7 +82,6 @@ std::array<double, 3> symbol_eval_args(const char symbol, const std::string &arg
 			print_info("arg parse error");
 		}
 
-		fmt::print("scale block: {}\n", base);
 		if (base.empty()) {
 			value += defaults[i];
 		} else {
@@ -101,8 +100,6 @@ std::array<double, 3> symbol_eval_args(const char symbol, const std::string &arg
 				if (!parse_block(repeat, repeat_op, repeat_expr, &repeat_n)) {
 					print_info("repeat parse error");
 				}
-
-				fmt::print("repeat block: {}\n", repeat_expr);
 
 				if (repeat_op == '+') {
 					value += _eval_expr(repeat_expr, x, y, z).value_or(0.0) * repeat_n;
@@ -127,7 +124,6 @@ std::array<double, 3> symbol_eval_args(const char symbol, const std::string &arg
 				print_info("repeat parse error");
 			}
 
-			fmt::print("scale block: {}\n", scale_expr);
 			if (scale_op == '+') {
 				value += _eval_expr(scale_expr, x, y, z).value_or(0.0);
 			}
@@ -156,8 +152,6 @@ void _turtle_action(Plant &plant, const char symbol, const std::string args) {
 	double y = args_ary[1];
 	double z = args_ary[2];
 	puts("symbol_eval_args");
-	fmt::print("symbol: {}, args: {}\n", symbol, args);
-	fmt::print("x:{}, y:{}, z:{}\n", x, y, z);
 
 	// grow branch
 	if (std::isalpha(symbol)) {
@@ -200,6 +194,54 @@ void _turtle_action(Plant &plant, const char symbol, const std::string args) {
 // the frame time is reached and another one that renders 1 branch every frame
 // or even every multiple frames
 // this can be more simple and shorter, 
+
+// plant start is 0.0 allways?
+bool generate_plant_timed(const Vec2 start, const std::string &lstring, Plant &plant, 
+		int &current_index){
+
+	
+	plant.turtle.node = plant.add_node(start);
+
+	int index = current_index;
+	int accum = 0;
+	while (index < lstring.size()) {
+
+		// check if 60 percent of time elapsed since frame start, then return
+		if (++accum >= 2) { // how often to check
+			accum = 0;
+			util::ms elapsed = util::Clock::now() - app::context.frame_start;
+			if ((elapsed / app::context.frame_time) >= 0.6) {
+				current_index = index;
+				return true;
+			}
+		}
+
+		char c = lstring[index];
+
+		// because of that, the check in the while condition is redundant
+		if (index + 1 >= lstring.size()) {
+			_turtle_action(plant, c, "");
+			return true;
+		}
+		else if (lstring[index + 1] != '<') {
+			_turtle_action(plant, c, "");
+			index++;
+		}
+		else {
+			index += 2; // move to after '<'
+			// fmt::print("[DEBUG] lstring[index]: {}\n", lstring[index]);
+			std::string args = util::get_substr(lstring, index, '>');
+			if (args.empty()) {
+				print_info("lstring invalid");
+				return false;
+			} else {
+				_turtle_action(plant, c, args);
+				index += args.size() + 1; // move to after '>'
+			}
+		}
+	}
+}
+
 Plant generate_plant(const Vec2 start, const std::string lstring) {
 	Plant plant{}; // plant muss parameter sein
 	plant.turtle.node = plant.add_node(start);

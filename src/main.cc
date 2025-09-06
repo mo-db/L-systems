@@ -24,10 +24,6 @@ int send(void) {
     return 0;
 }
 
-// a -> a(x, y, l)
-// a(x, y, l) -> a((x/l)/l, y/l*2; l-1)[b]
-// a<sin(l)>
-
 // store lines in main? vector<line>
 int main(int argc, char *argv[]) {
 	app::init(960, 540);
@@ -39,6 +35,7 @@ int main(int argc, char *argv[]) {
 
 	int accum = 0;
 	while(app::context.keep_running) {
+		app::context.frame_start = util::Clock::now();
 		process_events();
 		lock_frame_buf();
 
@@ -66,7 +63,7 @@ int main(int argc, char *argv[]) {
 
 		// if (lm::system.live) {
 		// 	for (auto &branch : lm::system.plant.branches) {
-		// 		draw::wide_line(draw::FrameBuf{(uint32_t*)app::video.frame_buf,
+		// 		draw::wide_line(draw::FrameBuf{(uint32_t*)app::video.window_texture_pixels,
 		// 				app::video.width, app::video.height}, 
 		// 				Line2{*branch.n1, *branch.n2}, color::fg, lm::system.standard_wd);
 		// 	}
@@ -78,7 +75,7 @@ int main(int argc, char *argv[]) {
 
 		// draw plant
 		for (auto &branch : lm::system.plant.branches) {
-			draw::wide_line(draw::FrameBuf{(uint32_t*)app::video.frame_buf,
+			draw::wide_line(draw::FrameBuf{(uint32_t*)app::video.window_texture_pixels,
 					app::video.width, app::video.height}, 
 					Line2{*branch.n1, *branch.n2}, color::fg, lm::system.standard_wd);
 		}
@@ -272,6 +269,11 @@ bool update_gui() {
 
 			}
 
+			if (ImGui::Button("Generate Plant Timed")) {
+				int index = 0;
+				bool fuckyou = lm::generate_plant_timed(Vec2{(double)app::video.width/2,
+						app::video.height - 50.0}, lm::lstring, lm::system.plant, index);
+			}
 
       // ___AXIOM___
       if (ImGui::TreeNode("Axiom")) {
@@ -409,7 +411,7 @@ bool update_gui() {
 
 				auto t1 = std::chrono::high_resolution_clock::now();
 				for (auto &branch : lm::system.plant.branches) {
-					draw::wide_line(draw::FrameBuf{(uint32_t*)app::video.frame_buf,
+					draw::wide_line(draw::FrameBuf{(uint32_t*)app::video.window_texture_pixels,
 							app::video.width, app::video.height}, 
 							Line2{*branch.n1, *branch.n2}, color::fg, lm::system.standard_wd);
 				}
@@ -462,17 +464,17 @@ bool update_gui() {
 
 void lock_frame_buf() {
 	SDL_SetRenderDrawColor(app::video.renderer, 0, 0, 0, 255);
-  SDL_RenderClear(app::video.renderer);
+  SDL_RenderClear(app::video.renderer); // dont clear, only if i pan screen
 
   assert(SDL_LockTexture(app::video.window_texture, NULL,
-                         reinterpret_cast<void **>(&app::video.frame_buf),
+                         reinterpret_cast<void **>(&app::video.window_texture_pixels),
                          &app::video.pitch));
 }
 
 void render() {
   SDL_UnlockTexture(app::video.window_texture);
   SDL_RenderTexture(app::video.renderer, app::video.window_texture, NULL, NULL);
-  app::video.frame_buf = nullptr;
+  app::video.window_texture_pixels = nullptr;
   app::video.pitch = 0;
 
 

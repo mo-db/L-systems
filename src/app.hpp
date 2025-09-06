@@ -5,6 +5,10 @@
 
 namespace app {
 struct Context {
+	// util::ms frame_time = (1000.0 / 60.0);
+  util::ms frame_time = util::ms(1000.0 / 60.0);
+	util::TimePoint frame_start;
+
 	bool keep_running = true;
 	std::string exec_path = "";
 	std::string save_path = "";
@@ -15,7 +19,7 @@ struct Video {
 	SDL_Window* window = nullptr;
 	SDL_Renderer* renderer = nullptr;
 	SDL_Texture* window_texture = nullptr;
-	uint32_t *frame_buf = nullptr;
+	uint32_t *window_texture_pixels = nullptr;
 	const SDL_PixelFormatDetails *pixel_format = SDL_GetPixelFormatDetails(SDL_PIXELFORMAT_RGBA32);
 	int pitch = 0;
 	int width = 0;
