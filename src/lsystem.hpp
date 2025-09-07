@@ -3,10 +3,10 @@
 #include "core.hpp"
 #include "app.hpp"
 #include "graphics.hpp"
+#include "rasterize.hpp"
 
 // lindenmayer-system
 namespace lm {
-
 struct Args {
 	std::string x, y, z;
     constexpr std::string& operator[](std::size_t i) noexcept {
@@ -24,23 +24,59 @@ struct Branch {
 
 struct Turtle {
 	Vec2 *node = nullptr;
-	double angle = gk::pi / 2.0;
-  Turtle() = default;
-  Turtle(const double angle)
-      : angle{angle} {}
+	double angle{};
+	Turtle() = default;
+	Turtle(Vec2 *node, const double angle) : node{node}, angle{angle} {}
 };
 
 struct Plant {
-	static constexpr int MAX_NODES = 10000;
-  std::array<Vec2, MAX_NODES> nodes; // unsorted
-	int node_counter = 0;
-  std::vector<Branch> branches; // sorts the nodes
-	Vec2 *add_node(Vec2 p) {
-		nodes[node_counter++] = p;
-		return &nodes[node_counter - 1];
-	}
+	Vec2 start_node{};
+	double start_angle{};
+
+	static const std::size_t max_nodes = 1000000; // mil
+	// std::unique_ptr<Vec2[]> nodes; // heap array
+	std::array<Vec2, max_nodes> nodes;
+
+	int node_count = 0;
+  std::vector<Branch> branches;
+
 	Turtle turtle{};
 	std::vector<Turtle> turtle_stack;
+
+	Plant() = default;
+	Plant(const Vec2 start_node, const double start_angle) :
+		start_node{start_node}, start_angle{start_angle}
+		// nodes{std::make_unique<Vec2[]>(max_nodes)} 
+	{
+		turtle.node = add_node(start_node);
+		turtle.angle = start_angle;
+	}
+
+	void init(const Vec2 start_node_, const double start_angle_) {
+		start_node = start_node_;
+		start_angle = start_angle_;
+		turtle.node = add_node(start_node_);
+		turtle.angle = start_angle_;
+	}
+
+	Vec2 *add_node(Vec2 node) {
+		if (node_count >= max_nodes) { return nullptr; }
+		nodes[node_count++] = node;
+		return &nodes[node_count - 1];
+	}
+
+	bool needs_update = true;
+	bool regenerating = false;
+	int current_lstring_index = 0;
+	bool redrawing = false;
+	int current_branch = 0;
+	void clear() {
+		branches.clear();
+		node_count = 0;
+		turtle.node = add_node(start_node);
+		turtle.angle = start_angle;
+		turtle_stack.clear();
+	}
 };
 
 struct System {
@@ -60,9 +96,6 @@ struct System {
 	char parameter_strings[n_parameters][text_size] = { "0.0", "0.0", "0.0", "0.0" };
 	std::array<double, n_parameters> parameters;
 
-	Plant plant{};
-	// std::string lstring = "";
-
 	// A-K
   const char *alphabet[alphabet_size] = { "A", "a", "B", "b", "+", "-" };
 
@@ -73,13 +106,12 @@ struct System {
 		char condition[text_size] = "0.0";
 		util::STATE condition_state = util::STATE::FALSE;
 		char text[text_size] = "";
-		Plant plant{};
 	};
 	std::array<Rule, max_rules> rules;
 };
 inline System system;
 inline std::string lstring = "";
-
+inline Plant plant;
 
 
 // generate plant from lstring
@@ -91,8 +123,10 @@ Vec2 _calculate_move(Turtle &turtle, const double length);
 void _turn(Turtle &turtle, const double angle);
 void _turtle_action(Plant &plant, const char c, const double *value);
 Plant generate_plant(const Vec2 start, const std::string lstring);
-bool generate_plant_timed(const Vec2 start, const std::string &lstring, Plant &plant, 
+bool generate_plant_timed(const std::string &lstring, Plant &plant, 
 		int &current_index);
+bool draw_plant_timed(const lm::Plant &plant, int &current_branch,
+											uint32_t color, draw::FrameBuf &fb);
 
 // generate the complete lstring from axiom and rules
 

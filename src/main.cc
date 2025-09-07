@@ -27,58 +27,29 @@ int send(void) {
 // store lines in main? vector<line>
 int main(int argc, char *argv[]) {
 	app::init(960, 540);
+	lm::plant.init(Vec2{(double)app::video.width/2, app::video.height - 50.0}, gk::pi / 2);
 
 	app::gui.clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 	app::gui.show_window_a = true;
 	app::gui.show_window_b = true;
 	app::gui.show_window_c = true;
 
-	int accum = 0;
+	draw::FrameBuf fb_main{app::video.window_texture_pixels, app::video.width, app::video.height};
+
+
+	fmt::print("bytes: {}\n", lm::plant.max_nodes * sizeof(Vec2));
+
 	while(app::context.keep_running) {
 		app::context.frame_start = util::Clock::now();
+
+		// check if plants need to be regenerated and redrawn
+		bool update_plant = false;
+		if (lm::plant.needs_update) {
+			lm::plant.needs_update = false;
+			update_plant = true;
+		}
+
 		process_events();
-		lock_frame_buf();
-
-		// calculate axiom and rule lstrings
-		// lm::system.axiom.plant = lm::generate_plant(modules.lsystem, Vec2{(double)app::video.width * 0.3, (double)app::video.height - 100.0},
-		// 		lm::system.axiom.text);
-
-		// INFO dont to at the moment
-		// calculate the lstring, every 30 frames
-		// if (accum == 0) {
-		if(accum == -1) {
-			// the following should instead trigger if some parameter text changes
-			// do something with the result?
-			// TODO this does not work anymore, function removed
-			// if (!lm::eval_parameters(lsystem)) {
-			// 	puts("eval failed for some parameter");
-			// }
-
-		// 	lm::system.lstring = lm::generate_lstring(modules.lsystem);
-		// 	lm::system.plant = lm::generate_plant(modules.lsystem, Vec2{(double)app::video.width * 0.7, (double)app::video.height - 100.0},
-		// 			lm::system.lstring);
-		}
-
-
-
-		// if (lm::system.live) {
-		// 	for (auto &branch : lm::system.plant.branches) {
-		// 		draw::wide_line(draw::FrameBuf{(uint32_t*)app::video.window_texture_pixels,
-		// 				app::video.width, app::video.height}, 
-		// 				Line2{*branch.n1, *branch.n2}, color::fg, lm::system.standard_wd);
-		// 	}
-		// }
-
-
-		// draw::thick_line({{200, 400}, {600, 700}}, color::fg, 40.0);
-		// draw::thick_line_mesh({{200, 400}, app::input.mouse}, color::fg, 40.0);
-
-		// draw plant
-		for (auto &branch : lm::system.plant.branches) {
-			draw::wide_line(draw::FrameBuf{(uint32_t*)app::video.window_texture_pixels,
-					app::video.width, app::video.height}, 
-					Line2{*branch.n1, *branch.n2}, color::fg, lm::system.standard_wd);
-		}
 
 		if (!update_gui()) {
 			return 1;
@@ -93,26 +64,41 @@ int main(int argc, char *argv[]) {
 		}
 		// fmt::print("offset: {},{}\n", viewport::vars.xy_offset.x, viewport::vars.xy_offset.y);
 		if (viewport::vars.panning_active) {
+			lm::plant.needs_update = true;
 			puts("pan active");
 		}
 
-		// update viewportx§
+		// generate a plant over one or more frames
+		if (update_plant || lm::plant.regenerating) {
+			if (!lm::plant.regenerating) {
+				lm::plant.clear();
+			}
+			bool done = generate_plant_timed(lm::lstring, lm::plant, lm::plant.current_lstring_index);
+			if (done) {
+				lm::plant.regenerating = false;
+			} else {
+				lm::plant.regenerating = true;
+			}
+		}
+
+		// draw a plant over one or more frames
+		if (update_plant || lm::plant.redrawing) {
+			if (!lm::plant.redrawing) {
+				draw::clear(fb_main, color::bg);
+			}
+			bool done = lm::draw_plant_timed(lm::plant, lm::plant.current_branch, color::fg, fb_main);
+			if (done) {
+				lm::plant.redrawing = false;
+			} else {
+				lm::plant.redrawing = true;
+			}
+		}
+
 		render();
-		accum++;
-		accum %= 60;
 	}
 	cleanup();
 	return 0;
 }
-
-// this updates the viewport variables, they are used in the transform funcs
-// if strg and mouse click, save cords, then if mouse up while strg, set offset
-// per delta, if mouse still down and strg up then reset to saved cords
-//
-//
-// save the old xy offset value
-// 
-
 
 // could return vector of key presses, maybe pairs of key and state
 void process_events() {
@@ -249,6 +235,9 @@ bool update_gui() {
 			if (ImGui::Button("Generate L-String")) {
 				lm::generate_lstring();
 			}
+			if (ImGui::Button("Regen Plant")) {
+				lm::plant.needs_update = true;
+			}
 			if (ImGui::Button("L-String Expand")) {
 				if (lm::system.current_iteration == 0) {
 					lm::lstring = lm::expand(lm::system.axiom);
@@ -263,17 +252,11 @@ bool update_gui() {
 				lm::lstring.clear();
 			}
 
-			if (ImGui::Button("Generate Plant")) {
-				lm::system.plant = 
-					lm::generate_plant(Vec2{(double)app::video.width/2, app::video.height - 50.0}, lm::lstring);
-
-			}
-
-			if (ImGui::Button("Generate Plant Timed")) {
-				int index = 0;
-				bool fuckyou = lm::generate_plant_timed(Vec2{(double)app::video.width/2,
-						app::video.height - 50.0}, lm::lstring, lm::system.plant, index);
-			}
+			// if (ImGui::Button("Generate Plant Timed")) {
+			// 	int index = 0;
+			// 	bool fuckyou = lm::generate_plant_timed(Vec2{(double)app::video.width/2,
+			// 			app::video.height - 50.0}, lm::lstring, lm::system.plant, index);
+			// }
 
       // ___AXIOM___
       if (ImGui::TreeNode("Axiom")) {
@@ -405,25 +388,29 @@ bool update_gui() {
       }
 
 
-			ImGui::Text("nodes: %d", lm::system.plant.node_counter);
-			ImGui::Checkbox("live Preview", &lm::system.live);
-			if (ImGui::Button("render")) {
-
-				auto t1 = std::chrono::high_resolution_clock::now();
-				for (auto &branch : lm::system.plant.branches) {
-					draw::wide_line(draw::FrameBuf{(uint32_t*)app::video.window_texture_pixels,
-							app::video.width, app::video.height}, 
-							Line2{*branch.n1, *branch.n2}, color::fg, lm::system.standard_wd);
-				}
-				auto t2 = std::chrono::high_resolution_clock::now();
-				std::chrono::duration<double, std::milli> dt_ms = t2 - t1;
-				std::cout << "dt_out: " << dt_ms << std::endl;
-			}
+			ImGui::Text("nodes: %d", lm::plant.node_count);
+			// ImGui::Checkbox("live Preview", &lm::system.live);
+			// if (ImGui::Button("render")) {
+			//
+			// 	auto t1 = std::chrono::high_resolution_clock::now();
+			// 	for (auto &branch : lm::plant.branches) {
+			// 		draw::wide_line(draw::FrameBuf{(uint32_t*)app::video.window_texture_pixels,
+			// 				app::video.width, app::video.height}, 
+			// 				Line2{*branch.n1, *branch.n2}, color::fg, lm::system.standard_wd);
+			// 	}
+			// 	auto t2 = std::chrono::high_resolution_clock::now();
+			// 	std::chrono::duration<double, std::milli> dt_ms = t2 - t1;
+			// 	std::cout << "dt_out: " << dt_ms << std::endl;
+			// }
 
 			// variables
 			ImGui::SliderInt("iterations", &lm::system.iterations, 0, 12);
-			ImGui::SliderFloat("length", &lm::system.standard_length, 0.0, 200.0);
-			ImGui::SliderFloat("angle", &lm::system.standard_angle, 0.0, gk::pi * 2.0);
+			if (ImGui::SliderFloat("length", &lm::system.standard_length, 0.0, 200.0)) {
+				lm::plant.needs_update = true;
+			}
+			if (ImGui::SliderFloat("angle", &lm::system.standard_angle, 0.0, gk::pi * 2.0)) {
+				lm::plant.needs_update = true;
+			}
 			ImGui::SliderInt("seg_count", &lm::system.standard_branch_seg_count, 1, 50);
 
 
@@ -432,51 +419,42 @@ bool update_gui() {
 			}
 
 			// this should not be here as a whole
-			if (ImGui::Button("render to images")) {
-				int frames = 320;
-				int width = 640;
-				int height = 480;
-				SDL_Surface *frame_surf = SDL_CreateSurface(width, height, SDL_PIXELFORMAT_RGBA32);
-				for (int i = 0; i < frames; i ++) {
-					lm::system.standard_angle -= 0.003;
-        	SDL_FillSurfaceRect(frame_surf, nullptr, 0xFF000000);
-					lm::lstring = lm::generate_lstring();
-					lm::system.plant = lm::generate_plant(Vec2{(double)width * 0.5,
-							(double)height * 0.9}, "placeholder");
-					for (auto &branch : lm::system.plant.branches) {
-						draw::wide_line(draw::FrameBuf{(uint32_t*)frame_surf->pixels,
-								frame_surf->w, frame_surf->h}, 
-								Line2{*branch.n1, *branch.n2}, 0xFFFF00FF, lm::system.standard_wd);
-					}
-
-					fmt::print("{}/frame{:06}\n", app::context.render_path, i);
-					std::string frame_file = fmt::format("{}/frame{:06}.png", app::context.render_path, i);
-					assert(IMG_SavePNG(frame_surf, frame_file.c_str()));
-					// assert(SDL_SaveBMP(frame_surf, frame_file.c_str()));
-				}
-				SDL_DestroySurface(frame_surf);
-			}
+			// if (ImGui::Button("render to images")) {
+			// 	int frames = 320;
+			// 	int width = 640;
+			// 	int height = 480;
+			// 	SDL_Surface *frame_surf = SDL_CreateSurface(width, height, SDL_PIXELFORMAT_RGBA32);
+			// 	for (int i = 0; i < frames; i ++) {
+			// 		lm::system.standard_angle -= 0.003;
+			//      	SDL_FillSurfaceRect(frame_surf, nullptr, 0xFF000000);
+			// 		lm::lstring = lm::generate_lstring();
+			// 		lm::system.plant = lm::generate_plant(Vec2{(double)width * 0.5,
+			// 				(double)height * 0.9}, "placeholder");
+			// 		for (auto &branch : lm::system.lm::plant.branches) {
+			// 			draw::wide_line(draw::FrameBuf{(uint32_t*)frame_surf->pixels,
+			// 					frame_surf->w, frame_surf->h}, 
+			// 					Line2{*branch.n1, *branch.n2}, 0xFFFF00FF, lm::system.standard_wd);
+			// 		}
+			//
+			// 		fmt::print("{}/frame{:06}\n", app::context.render_path, i);
+			// 		std::string frame_file = fmt::format("{}/frame{:06}.png", app::context.render_path, i);
+			// 		assert(IMG_SavePNG(frame_surf, frame_file.c_str()));
+			// 		// assert(SDL_SaveBMP(frame_surf, frame_file.c_str()));
+			// 	}
+			// 	SDL_DestroySurface(frame_surf);
+			// }
 		}
     ImGui::End();
   }
 	return true;
 }
 
-void lock_frame_buf() {
-	SDL_SetRenderDrawColor(app::video.renderer, 0, 0, 0, 255);
-  SDL_RenderClear(app::video.renderer); // dont clear, only if i pan screen
-
-  assert(SDL_LockTexture(app::video.window_texture, NULL,
-                         reinterpret_cast<void **>(&app::video.window_texture_pixels),
-                         &app::video.pitch));
-}
-
 void render() {
-  SDL_UnlockTexture(app::video.window_texture);
-  SDL_RenderTexture(app::video.renderer, app::video.window_texture, NULL, NULL);
-  app::video.window_texture_pixels = nullptr;
-  app::video.pitch = 0;
+	SDL_SetRenderDrawColor(app::video.renderer, 0, 0, 0, 255);
+  SDL_RenderClear(app::video.renderer);
 
+	SDL_UpdateTexture(app::video.window_texture, nullptr, app::video.window_texture_pixels, app::video.width * 4);
+  SDL_RenderTexture(app::video.renderer, app::video.window_texture, NULL, NULL);
 
   ImGui::Render();
   SDL_SetRenderScale(app::video.renderer, app::gui.io->DisplayFramebufferScale.x,

@@ -3,10 +3,10 @@
 
 namespace lm {
 Vec2 _calculate_move(Turtle &turtle, const double length) {
+	// how to do this without trig?
 	Vec2 position = *turtle.node;
 	position.x += length * cos(turtle.angle);
 	position.y += length * -sin(turtle.angle);
- 	// fmt::print("pos.x: {}, pos.y: {}\n", position.x, position.y);
 	return position;
 }
 void _turn(Turtle &turtle, const double angle) { turtle.angle += angle; }
@@ -147,11 +147,13 @@ void _turtle_action(Plant &plant, const char symbol, const std::string args) {
 	Turtle &turtle = plant.turtle;
 	std::vector<Turtle> &turtle_stack = plant.turtle_stack;
 
-	std::array<double, 3> args_ary = symbol_eval_args(symbol, args);
+	std::array<double, 3> args_ary{};
+	if (symbol != '[' && symbol != ']') {
+		args_ary = symbol_eval_args(symbol, args);
+	}
 	double x = args_ary[0];
 	double y = args_ary[1];
 	double z = args_ary[2];
-	puts("symbol_eval_args");
 
 	// grow branch
 	if (std::isalpha(symbol)) {
@@ -161,7 +163,7 @@ void _turtle_action(Plant &plant, const char symbol, const std::string args) {
 		}
 
 		// check nodes limit
-		if (plant.node_counter < plant.MAX_NODES) {
+		if (plant.node_count < plant.max_nodes) {
 			Vec2 *last_node = turtle.node;
 			Vec2 *new_node = plant.add_node(_calculate_move(turtle, x));
     	plant.branches.push_back(Branch{last_node, new_node, symbol, visable, 1.0});
@@ -190,17 +192,19 @@ void _turtle_action(Plant &plant, const char symbol, const std::string args) {
 	}
 }
 
+
+bool vars_changed(double angle) {
+
+	return false;
+}
+
 // i need two functions, one that generates all at once or untill
 // the frame time is reached and another one that renders 1 branch every frame
 // or even every multiple frames
 // this can be more simple and shorter, 
 
 // plant start is 0.0 allways?
-bool generate_plant_timed(const Vec2 start, const std::string &lstring, Plant &plant, 
-		int &current_index){
-
-	
-	plant.turtle.node = plant.add_node(start);
+bool generate_plant_timed(const std::string &lstring, Plant &plant, int &current_index){
 
 	int index = current_index;
 	int accum = 0;
@@ -210,9 +214,11 @@ bool generate_plant_timed(const Vec2 start, const std::string &lstring, Plant &p
 		if (++accum >= 2) { // how often to check
 			accum = 0;
 			util::ms elapsed = util::Clock::now() - app::context.frame_start;
+			// print_info(fmt::format("generate_plant elapsed: {}\n",
+			// 			(elapsed / app::context.frame_time)));
 			if ((elapsed / app::context.frame_time) >= 0.6) {
 				current_index = index;
-				return true;
+				return false;
 			}
 		}
 
@@ -221,6 +227,7 @@ bool generate_plant_timed(const Vec2 start, const std::string &lstring, Plant &p
 		// because of that, the check in the while condition is redundant
 		if (index + 1 >= lstring.size()) {
 			_turtle_action(plant, c, "");
+			current_index = 0;
 			return true;
 		}
 		else if (lstring[index + 1] != '<') {
@@ -233,48 +240,41 @@ bool generate_plant_timed(const Vec2 start, const std::string &lstring, Plant &p
 			std::string args = util::get_substr(lstring, index, '>');
 			if (args.empty()) {
 				print_info("lstring invalid");
+				current_index = 0;
+				return true;
+			} else {
+				_turtle_action(plant, c, args);
+				index += args.size() + 1; // move to after '>'
+			}
+		}
+	}
+
+	current_index = 0;
+	return true;
+}
+
+bool draw_plant_timed(const lm::Plant &plant, int &current_branch,
+											uint32_t color, draw::FrameBuf &fb) {
+	int accum = 0;
+	for (int i = current_branch; i < plant.branches.size(); i++) {
+		// ---- timing ----
+		if (++accum >= 2) {
+			accum = 0;
+			util::ms elapsed = util::Clock::now() - app::context.frame_start;
+			// print_info(fmt::format("draw_plant elapsed: {}\n",
+			// 			(elapsed / app::context.frame_time)));
+			if ((elapsed / app::context.frame_time) >= 0.9) {
+				current_branch = i;
 				return false;
-			} else {
-				_turtle_action(plant, c, args);
-				index += args.size() + 1; // move to after '>'
 			}
 		}
+
+		auto &branch = plant.branches[i];
+		draw::wide_line(fb, Line2{*branch.n1, *branch.n2}, color, lm::system.standard_wd);
 	}
+	current_branch = 0;
+	return true;
 }
-
-Plant generate_plant(const Vec2 start, const std::string lstring) {
-	Plant plant{}; // plant muss parameter sein
-	plant.turtle.node = plant.add_node(start);
-
-	int index = 0;
-	while (index < lstring.size()) {
-		char c = lstring[index];
-
-		// because of that, the check in the while condition is redundant
-		if (index + 1 >= lstring.size()) {
-			_turtle_action(plant, c, "");
-			return plant;
-		}
-		else if (lstring[index + 1] != '<') {
-			_turtle_action(plant, c, "");
-			index++;
-		}
-		else {
-			index += 2; // move to after '<'
-			// fmt::print("[DEBUG] lstring[index]: {}\n", lstring[index]);
-			std::string args = util::get_substr(lstring, index, '>');
-			if (args.empty()) {
-				print_info("lstring invalid");
-				return plant; // TODO: return error value
-			} else {
-				_turtle_action(plant, c, args);
-				index += args.size() + 1; // move to after '>'
-			}
-		}
-	}
-	return plant;
-}
-
 
 std::optional<double> _eval_expr(std::string &expr_string, double *x,
 																 double *y, double *z) {

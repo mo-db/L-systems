@@ -58,24 +58,25 @@ constexpr double pi = std::numbers::pi;
 
 namespace color {
 
-constexpr uint32_t black =					0x000000FF;
+// colors are ABGR -> little endian with SDL_PIXELFORMAT_RGBA32
+constexpr uint32_t black =					0xFF000000;
 constexpr uint32_t white =					0xFFFFFFFF;
-constexpr uint32_t dark_grey =			0x005C5C5C;
-constexpr uint32_t light_grey =			0x00C5C5C5;
+constexpr uint32_t dark_grey =			0xFF555555;
+constexpr uint32_t light_grey =			0xFFCCCCCC;
 
-constexpr uint32_t red =						0x00FF0000;
-constexpr uint32_t green =					0x0000FF00;
-constexpr uint32_t blue =						0x000000FF;
+constexpr uint32_t red =						0xFF0000FF;
+constexpr uint32_t green =					0xFF00FF00;
+constexpr uint32_t blue =						0xFF0000FF;
 
-constexpr uint32_t yellow =					0x00FFFF00;
-constexpr uint32_t magenta =				0x00FF00FF;
-constexpr uint32_t cyan =						0x0000FFFF;
+constexpr uint32_t yellow =					0xFF00FFFF;
+constexpr uint32_t magenta =				0xFFFF00FF;
+constexpr uint32_t cyan =						0xFFFFFF00;
 
 constexpr uint32_t fg =							white;
 constexpr uint32_t bg =							black;
 constexpr uint32_t conceal =				dark_grey;
 constexpr uint32_t select =					red;
-constexpr uint32_t special = blue;
+constexpr uint32_t special = 				blue;
 constexpr uint32_t hl_primary =			green;
 constexpr uint32_t hl_secondary =		cyan;
 constexpr uint32_t hl_tertiary =		magenta;

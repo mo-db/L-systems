@@ -42,6 +42,9 @@ void set_pixel(FrameBuf fb, int x, int y, uint32_t color) {
 	}
 }
 
+void clear(FrameBuf fb, uint32_t color) {
+	for (int i = 0; i < fb.width * fb.height; i++) { fb.pixels[i] = color; }
+}
 
 // Returns double the signed area but that's fine
 double _edge_function(Vec2 a, Vec2 b, Vec2 c) {
