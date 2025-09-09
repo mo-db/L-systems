@@ -12,6 +12,7 @@ Vec2 _calculate_move(Turtle &turtle, const double length) {
 void _turn(Turtle &turtle, const double angle) { turtle.angle += angle; }
 
 
+// this could return possible defaults for all 3 vars
 std::optional<double> get_default(const char symbol) {
 	if (std::isalpha(symbol)) {
 		return lm::system.standard_length;
@@ -23,6 +24,7 @@ std::optional<double> get_default(const char symbol) {
 	return {};
 }
 
+// if args are empty returns default or 0.0
 std::array<double, 3> symbol_eval_args(const char symbol, const std::string &args_str) {
 	auto result = get_default(symbol);
 	if (result == std::nullopt) { return {}; }
@@ -169,6 +171,7 @@ void _turtle_action(Plant &plant, const char symbol, const std::string args) {
     	plant.branches.push_back(Branch{last_node, new_node, symbol, visable, 1.0});
 			turtle.node = new_node;
 		} else {
+			std::exit(1);
 			std::puts("node limit reached");
 		}
 	}
@@ -192,17 +195,6 @@ void _turtle_action(Plant &plant, const char symbol, const std::string args) {
 	}
 }
 
-
-bool vars_changed(double angle) {
-
-	return false;
-}
-
-// i need two functions, one that generates all at once or untill
-// the frame time is reached and another one that renders 1 branch every frame
-// or even every multiple frames
-// this can be more simple and shorter, 
-
 // plant start is 0.0 allways?
 bool generate_plant_timed(const std::string &lstring, Plant &plant, int &current_index){
 
@@ -211,7 +203,7 @@ bool generate_plant_timed(const std::string &lstring, Plant &plant, int &current
 	while (index < lstring.size()) {
 
 		// check if 60 percent of time elapsed since frame start, then return
-		if (++accum >= 2) { // how often to check
+		if (++accum >= 5) { // how often to check
 			accum = 0;
 			util::ms elapsed = util::Clock::now() - app::context.frame_start;
 			// print_info(fmt::format("generate_plant elapsed: {}\n",
@@ -256,9 +248,11 @@ bool generate_plant_timed(const std::string &lstring, Plant &plant, int &current
 bool draw_plant_timed(const lm::Plant &plant, int &current_branch,
 											uint32_t color, draw::FrameBuf &fb) {
 	int accum = 0;
+	print_info("here");
 	for (int i = current_branch; i < plant.branches.size(); i++) {
+		print_info(fmt::format("current branch {}\n", i));
 		// ---- timing ----
-		if (++accum >= 2) {
+		if (++accum >= 10) {
 			accum = 0;
 			util::ms elapsed = util::Clock::now() - app::context.frame_start;
 			// print_info(fmt::format("draw_plant elapsed: {}\n",
@@ -272,7 +266,6 @@ bool draw_plant_timed(const lm::Plant &plant, int &current_branch,
 		auto &branch = plant.branches[i];
 		draw::wide_line(fb, Line2{*branch.n1, *branch.n2}, color, lm::system.standard_wd);
 	}
-	current_branch = 0;
 	return true;
 }
 
@@ -463,8 +456,6 @@ bool parse_arg(const std::string arg, std::string &base, std::string &pattern,
 	if (repeats_start = arg.find('{'); repeats_start != std::string::npos) {
 		if (repeats_end = arg.find_last_of('}'); repeats_end != std::string::npos) {
 			repeats_str = arg.substr(repeats_start, repeats_end - repeats_start + 1);
-			// INFO:
-			fmt::print("repeats_str: {}\n", repeats_str);
 
 			// parse repeats_str into repeats vector
 			bool expect_open = false;
@@ -494,14 +485,9 @@ bool parse_arg(const std::string arg, std::string &base, std::string &pattern,
 	return true;
 }
 
-// try to substitute the rule_arg for arg
-// return arg on error
+// arg can be empty
+// error if rule_arg is empty, return early -> arg
 std::string arg_rulearg_substitute(const std::string arg, const std::string rule_arg) {
-	// a<x,y> -> a<base_len{/, 2}[*, m], m{+, 0.1}>
-	// a<x> -> a<base_len>
-	// a<x> -> a<base{repeat}[scale]>
-
-	
 	// handle incomplete
 	if (rule_arg.empty()) {
 		print_info("rule_arg incomplete");
@@ -527,10 +513,12 @@ std::string arg_rulearg_substitute(const std::string arg, const std::string rule
     std::string pattern = "";
     std::vector<std::string> repeats{};
     std::string scale = "";
-    if (!parse_arg(arg, base, pattern, repeats, scale)) {
-			print_info("arg parse error");
-			return "";
-    }
+		if (!arg.empty()) {
+			if (!parse_arg(arg, base, pattern, repeats, scale)) {
+				print_info("arg parse error");
+				return "";
+			}
+		}
 
 		// parse rule_repeat
     char rule_repeat_op;
@@ -668,9 +656,9 @@ std::string _maybe_apply_rule(const char symbol, const std::string args) {
 		default_return = fmt::format("{}<{}>", symbol, args);
 	}
 
-	auto result = get_default(symbol);
-	if (result == std::nullopt) { return ""; }
-	double x_default = result.value();
+	// auto result = get_default(symbol);
+	// if (result == std::nullopt) { return ""; }
+	// double x_default = result.value();
 
 	// ---- extract args of symbol ----
 	std::string x = "";
@@ -682,13 +670,11 @@ std::string _maybe_apply_rule(const char symbol, const std::string args) {
  		n_args = parse_args(args, x, y, z);
 		if (n_args == 0) { 
 			print_info("parse_args error");
-			return fmt::format("{}", symbol);
+			return fmt::format("{}", symbol); // DONO
 		}
-	} else {
-		x = std::to_string(x_default);
 	}
 
-	fmt::print("args: {}\n", args);
+	// fmt::print("args: {}\n", args);
 
 	// ---- try to match a rule ----
 	for (auto &rule : system.rules) {
@@ -749,7 +735,7 @@ std::string _maybe_apply_rule(const char symbol, const std::string args) {
 				// text[index] == symbol
 				return_str += text[index++]; // append symbol
 				if (index >= text.size()) { continue; }
-				if (text[index] != '<') { continue; }
+				if (text[index] != '<') { continue; } // replace arg with default
 
 				// ---- symbol with args found in rule ----
 				index++;
@@ -758,7 +744,7 @@ std::string _maybe_apply_rule(const char symbol, const std::string args) {
 					print_info("rule block incomplete");
 					return default_return; 
 				}
-				index += rule_symbol_args.size() + 1;
+				index += rule_symbol_args.size() + 1; // move index after '>'
 
 				// the args of the symbol occurence in rule
 				std::string rule_x = "";
@@ -770,8 +756,9 @@ std::string _maybe_apply_rule(const char symbol, const std::string args) {
 				std::string fin_x = "";
 				std::string fin_y = ""; 
 				std::string fin_z = "";
+
 				// what to do if impty?
-				fin_x = arg_rulearg_substitute(x, rule_x);
+				fin_x = arg_rulearg_substitute(x, rule_x); // arg can be empty
 				return_str += '<';
 				return_str += fin_x;
 				if (n_args > 1) {
@@ -791,49 +778,45 @@ std::string _maybe_apply_rule(const char symbol, const std::string args) {
 	return default_return; 
 }
 
-
-// does one iteration on the lstring
-std::string expand(std::string lstring) {
+bool System::expand() {
+	// exit early on first iteration
+	if (current_iteration == 0) {
+		current_iteration++;
+		lstring = axiom;
+		return true;
+	}
+	// expand lstring and save into lstring_expanded
   std::string lstring_expanded = "";
-	puts("fuck1");
-
 	int index = 0;
 	while (index < lstring.size()) {
 		char c = lstring[index];
-
 		// some symbols can just be copied directly
 		if (c == '[' || c == ']') {
 			lstring_expanded += lstring[index++];
 		} else {
-			if (index + 1 >= lstring.size()) {
+			if (index + 1 >= lstring.size()) { // this makes while condition irrelevant
 				lstring_expanded += _maybe_apply_rule(lstring[index], "");
-				return lstring_expanded;
+				break;
 			} else if (lstring[index + 1] != '<') {
 				lstring_expanded += _maybe_apply_rule(lstring[index++], "");
 			} else {
 				index += 2; // move to after '<'
-				fmt::print("[DEBUG] lstring[index]: {}\n", lstring[index]);
 				std::string args = util::get_substr(lstring, index, '>');
 				if (args.empty()) {
-					print_info("lstring invalid");
-					return "";
-				} else {
-					lstring_expanded += _maybe_apply_rule(c, args);
-					index += args.size() + 1; // move to after '>'
+					print_info("lstring invalid, expand failed");
+					return false;
 				}
+				lstring_expanded += _maybe_apply_rule(c, args);
+				index += args.size() + 1; // move to after '>'
 			}
 		}
 	}
-	return lstring_expanded;
+	// replace lstring with lstring_expanded and return
+	lstring = lstring_expanded;
+	current_iteration++;
+	return true;
 }
 
-std::string generate_lstring() {
-	std::string lstring = "";
-	for (int i = 0; i < system.iterations; i++) {
-		lstring = expand(lstring);		
-	}
-	return lstring;
-}
 
 // TODO serialize lsystem
 bool save_rule_as_file(System::Rule &rule, const std::string &save_file_name) {

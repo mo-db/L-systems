@@ -40,6 +40,8 @@ struct Gui {
 	bool show_window_a = false;
 	bool show_window_b = false;
 	bool show_window_c = false;
+	bool show_lsystem_window = false;
+	bool show_rendering_window = false;
 };
 
 struct Input {

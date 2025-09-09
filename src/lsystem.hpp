@@ -9,9 +9,9 @@
 namespace lm {
 struct Args {
 	std::string x, y, z;
-    constexpr std::string& operator[](std::size_t i) noexcept {
-        return (i==0 ? x : (i==1 ? y : z));
-    }
+	constexpr std::string& operator[](std::size_t i) noexcept {
+			return (i==0 ? x : (i==1 ? y : z));
+	}
 };
 
 struct Branch {
@@ -65,11 +65,13 @@ struct Plant {
 		return &nodes[node_count - 1];
 	}
 
-	bool needs_update = true;
+	bool needs_regen = true;
 	bool regenerating = false;
 	int current_lstring_index = 0;
+	bool needs_redraw = true;
 	bool redrawing = false;
 	int current_branch = 0;
+
 	void clear() {
 		branches.clear();
 		node_count = 0;
@@ -81,8 +83,7 @@ struct Plant {
 
 struct System {
 	bool live = true;
-	int iterations = 1;
-	int current_iteration = 0;
+
 	float standard_length = 50.0;
 	float standard_angle = gk::pi / 2.0;
 	float standard_wd = 1.0;
@@ -99,6 +100,10 @@ struct System {
 	// A-K
   const char *alphabet[alphabet_size] = { "A", "a", "B", "b", "+", "-" };
 
+	// only this
+	int iterations = 1;
+	int current_iteration = 0;
+	std::string lstring = "";
 	char axiom[app::gui.textfield_size] = "";
 	struct Rule {
 		int symbol_index = 0;
@@ -108,11 +113,18 @@ struct System {
 		char text[text_size] = "";
 	};
 	std::array<Rule, max_rules> rules;
+	bool expand();
+	bool generate() {
+		current_iteration = 0;
+		for (int i = 0; i < iterations; i++) {
+			if(!expand()) { return false; }
+		}
+		return true;
+	}
 };
-inline System system;
-inline std::string lstring = "";
-inline Plant plant;
 
+inline System system;
+inline Plant plant;
 
 // generate plant from lstring
 
@@ -150,8 +162,6 @@ bool parse_arg(const std::string arg, std::string &base, std::string &pattern,
 std::string arg_rulearg_substitute(const std::string arg, const std::string rule_arg);
 
 std::string _maybe_apply_rule(const char symbol, const std::string args);
-std::string generate_lstring();
-std::string expand(std::string lstring);
 
 // calculate x,y,z args for a symbol, if x = 0.0 -> error, y,z default to 0.0
 std::array<double, 3> symbol_eval_args(const char symbol, const std::string &args);
