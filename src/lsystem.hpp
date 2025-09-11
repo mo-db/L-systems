@@ -14,6 +14,95 @@ struct Args {
 	}
 };
 
+struct Var {
+	char label = '\0';
+	char expr[app::gui.textfield_size];
+	bool use_slider = false;
+	float slider_start = 0.0;
+	float slider_end = 1.0;
+	float value = 0.0;
+	Var(char label) : label{label} {}
+};
+
+struct GlobVars2 {
+	static constexpr int quant = 5;
+	Var l{'l'};
+	Var m{'m'};
+	Var n{'n'};
+	Var o{'o'};
+	Var p{'p'};
+	Var* var(const int i) {
+		switch (i) {
+			case 0: return &l;
+			case 1: return &m;
+			case 2: return &n;
+			case 3: return &o;
+			case 4: return &p;
+			default: return nullptr;
+		}
+	}
+};
+inline GlobVars2 glob_vars2;
+
+struct GlobVars {
+	static constexpr int amount = 5;
+	static constexpr int textfield_size = app::gui.textfield_size;
+	bool l_use_slider = false;
+	float l_slider_start = 0.0;
+	float l_slider_end = 1.0;
+	char l[app::gui.textfield_size];
+	float l_value = 0.0;
+
+
+
+
+	char m[app::gui.textfield_size];
+	char n[app::gui.textfield_size];
+	char o[app::gui.textfield_size];
+	char p[app::gui.textfield_size];
+	float m_value = 0.0;
+	float n_value = 0.0;
+	float o_value = 0.0;
+	float p_value = 0.0;
+
+	constexpr char* operator[](const int i) noexcept {
+		switch (i) {
+			case 0: return l;
+			case 1: return m;
+			case 2: return n;
+			case 3: return o;
+			case 4: return p;
+			default: return nullptr;
+		}
+	}
+	float* value(const int i) {
+		switch (i) {
+			case 0: return &l_value;
+			case 1: return &m_value;
+			case 2: return &n_value;
+			case 3: return &o_value;
+			case 4: return &p_value;
+			default: return nullptr;
+		}
+	}
+
+	char get_label(const int i) {
+		switch (i) {
+			case 0: return 'l';
+			case 1: return 'm';
+			case 2: return 'n';
+			case 3: return 'o';
+			case 4: return 'p';
+			default: return '\0';
+		}
+	}
+	// for all default values and global vars do:
+	// [var text field] [var slider, expo || log || normal]
+	// > Defaults []
+	// > GlobVars []
+};
+inline GlobVars glob_vars;
+
 struct Branch {
 	Vec2 *n1 = nullptr;
 	Vec2 *n2 = nullptr;
@@ -167,6 +256,8 @@ std::string _maybe_apply_rule(const char symbol, const std::string args);
 std::array<double, 3> symbol_eval_args(const char symbol, const std::string &args);
 
 std::optional<double> get_default(const char symbol);
+
+void update_vars();
 
 // into util
 std::string get_substr(const std::string &str, const int index, const char c);

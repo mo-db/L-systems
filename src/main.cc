@@ -33,6 +33,8 @@ int main(int argc, char *argv[]) {
 	app::gui.show_window_a = true;
 	app::gui.show_window_b = true;
 	app::gui.show_window_c = true;
+	app::gui.show_rendering_window = true;
+	app::gui.show_lsystem_window = true;
 
 	draw::FrameBuf fb_main{app::video.window_texture_pixels, app::video.width, app::video.height};
 
@@ -41,12 +43,11 @@ int main(int argc, char *argv[]) {
 
 	while(app::context.keep_running) {
 		app::context.frame_start = util::Clock::now();
-
 		process_events();
-
 		if (!update_gui()) {
 			return 1;
 		}
+		lm::update_vars();
 
 		// where to put this?
 		// -> if strg-down on mouse down save mouse coords as old offset cords
@@ -187,15 +188,27 @@ bool update_gui() {
     ImGui::ShowDemoWindow(&app::gui.show_window_a);
   }
 
-  static bool lsystem_window_open = true;
 	if (app::gui.show_lsystem_window) {
     ImGui::SetNextWindowSize(ImVec2(500, 440), ImGuiCond_FirstUseEver);
-    if (ImGui::Begin("L-System", &lsystem_window_open,
+    if (ImGui::Begin("L-System", &app::gui.show_lsystem_window,
                      ImGuiWindowFlags_MenuBar)) {
 		}
     ImGui::End();
 	}
+
 	if (app::gui.show_rendering_window) {
+    ImGui::SetNextWindowSize(ImVec2(500, 440), ImGuiCond_FirstUseEver);
+    if (ImGui::Begin("Plant", &app::gui.show_rendering_window,
+                     ImGuiWindowFlags_MenuBar)) {
+      if (ImGui::TreeNode("Global Variables")) {
+				for (int i = 0; i < lm::glob_vars.amount; i++) {
+					std::string label = fmt::format("{}", lm::glob_vars.get_label(i));
+        	ImGui::InputText(label.c_str(), lm::glob_vars[i], lm::system.text_size);
+				}
+        ImGui::TreePop();
+      }
+		}
+    ImGui::End();
 	}
 
   // ___LSYSTEM_MAIN___
@@ -384,6 +397,48 @@ bool update_gui() {
 			}
 			// ImGui::SliderInt("seg_count", &lm::system.standard_branch_seg_count, 1, 50);
 			ImGui::SliderFloat("wd", &lm::system.standard_wd, 1.0f, 50.0f);
+      if (ImGui::TreeNode("Global Variables")) {
+				for (int i = 0; i < lm::glob_vars.amount; i++) {
+					char label = lm::glob_vars.get_label(i);
+					std::string text_label = fmt::format("Text {}\n", lm::glob_vars.get_label(i));
+					std::string slider_label = fmt::format("Slider {}\n", lm::glob_vars.get_label(i));
+        	ImGui::InputText(text_label.c_str(), lm::glob_vars[i], app::gui.textfield_size);
+					ImGui::SameLine();
+					if (ImGui::SliderFloat(slider_label.c_str(), lm::glob_vars.value(i), 0.0, gk::pi * 2.0)) {
+						std::to_string(*lm::glob_vars.value(i)).copy(lm::glob_vars[i], app::gui.textfield_size);
+						lm::plant.needs_regen = true;
+					}
+
+					// i changed glob vars operator[] to char ** need refactor
+					// make slider for the vars
+				}
+        ImGui::TreePop();
+      }
+
+			for (int i = 0; i < lm::glob_vars2.quant; i++) {
+				lm::Var *var = lm::glob_vars2.var(i);
+				if (ImGui::Checkbox(fmt::format("{} use slider?", var->label).c_str(),
+							&var->use_slider)) {}
+				if (var->use_slider) {
+					// ImGui::SameLine();
+					ImGui::InputFloat(fmt::format("{}_min", var->label).c_str(),
+							&(var->slider_start));
+					ImGui::InputFloat(fmt::format("{}_max", var->label).c_str(),
+							&(var->slider_end));
+					if (ImGui::SliderFloat(fmt::format("{}_text", var->label).c_str()
+								, &(var->value),
+							var->slider_start, var->slider_end)) {
+						(var->expr)[0] = '\0';
+						lm::plant.needs_regen = true;
+					}
+				} else {
+					if (ImGui::InputText(fmt::format("{}_text", var->label).c_str(),
+								var->expr, app::gui.textfield_size)) {
+						lm::plant.needs_regen = true;
+					}
+				}
+			}
+
 
 			// this should not be here as a whole
 			// if (ImGui::Button("render to images")) {

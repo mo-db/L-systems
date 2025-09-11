@@ -2,6 +2,17 @@
 #include "core.hpp"
 
 namespace lm {
+void update_vars() {
+	for (int i = glob_vars2.quant - 1; i >= 0; i--) {
+		Var *var = glob_vars2.var(i);
+		if (var->use_slider) {
+		} else {
+			std::string glob_var_str = var->expr;
+			var->value = _eval_expr(glob_var_str, nullptr, nullptr, nullptr).value_or(0.0);
+		}
+	}
+}
+
 Vec2 _calculate_move(Turtle &turtle, const double length) {
 	// how to do this without trig?
 	Vec2 position = *turtle.node;
@@ -281,16 +292,16 @@ std::optional<double> _eval_expr(std::string &expr_string, double *x,
 	if (x) { symbol_table.add_variable("x", *x); }
 	if (y) { symbol_table.add_variable("y", *y); }
 	if (z) { symbol_table.add_variable("z", *z); }
-	T l = T(system.parameters[0]);
-	T m = T(system.parameters[1]);
-	T n = T(system.parameters[2]);
-	T o = T(system.parameters[3]);
-	// all others
 
-	symbol_table.add_variable("l", l);
-	symbol_table.add_variable("m", m);
-	symbol_table.add_variable("n", n);
-	symbol_table.add_variable("o", o);
+	// this will not work at all, the vars need to be expanded allready when this is called
+	// the vars can reference themselves in reverse tough
+	// i also should maybe not at all use double here since ImGui expects float
+	// TODO: vars get not updated!
+	for (int i = glob_vars2.quant - 1; i >= 0; i--) {
+		Var *var = glob_vars2.var(i);
+		double value = var->value;
+		symbol_table.add_variable(fmt::format("{}", var->label), value);
+	}
 
 	expression_t expr;
 	expr.register_symbol_table(symbol_table);
