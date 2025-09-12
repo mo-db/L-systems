@@ -16,7 +16,7 @@ struct Args {
 
 struct Var {
 	std::string label = "";
-	char expr[app::gui.textfield_size];
+	char expr[app::gui.textfield_size] = {'\0'};
 	bool use_slider = false;
 	float slider_start = 0.0;
 	float slider_end = 1.0;
@@ -116,8 +116,8 @@ struct System {
 
 	float standard_length = 50.0;
 	float standard_angle = gk::pi / 2.0;
-	float standard_wd = 1.0;
-	int standard_branch_seg_count = 1;
+	int standard_wd = 1; // could be float with aliasing
+	// int standard_branch_seg_count = 1;
 	static constexpr int alphabet_size = 6;
 	static constexpr int text_size = 512;
 	static constexpr int max_rules = 3;

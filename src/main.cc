@@ -274,41 +274,6 @@ bool update_gui() {
 
         if (ImGui::TreeNode(label.c_str())) {
 
-					// TODO i should instead save and restore all text fields in file
-					// ___SAVE_FILES_COMBO___
-					static std::vector<std::string> save_file_names;
-					if (auto result = lm::scan_saves()) {
-						save_file_names = result.value();
-					}
-
-          static ImGuiComboFlags flags1 = 0;
-					static int save_fname_index = 0;
-          const char *combo_preview_value1;
-					if (save_file_names.size() > 0) {
-          	combo_preview_value1 = (save_file_names[save_fname_index]).c_str();
-					} else {
-          	combo_preview_value1 = "NIL";
-					}
-          if (ImGui::BeginCombo("files", combo_preview_value1, flags1)) {
-            for (int n = 0; n < (int)save_file_names.size(); n++) {
-              const bool is_selected = (save_fname_index == n);
-
-              if (ImGui::Selectable(save_file_names[n].c_str(), is_selected)) {
-								// execute if gui drop down field is selected
-                save_fname_index = n;
-								if (!lm::load_rule_from_file(lm::system.rules[i],
-											save_file_names[save_fname_index])) {
-									std::puts("fail, rule couldnt be loaded");
-								}
-							}
-
-              // Set the initial focus when opening the combo (scrolling +
-              // keyboard navigation focus)
-              if (is_selected)
-                ImGui::SetItemDefaultFocus();
-            }
-            ImGui::EndCombo();
-					}
 
 					// ___SYMBOL_SELECTION_COMNO___
           static ImGuiComboFlags flags = 0;
@@ -354,40 +319,13 @@ bool update_gui() {
 					}
           ImGui::InputText("text", lm::system.rules[i].text, lm::system.text_size);
 
-
-          // ___SAVE_RULE___
-					// this works
-					static constexpr int text_size = app::Gui::textfield_size;
-					static char save_file_name[text_size] = ""; // needs be persistant
-          ImGui::InputText("save_file", save_file_name, text_size);
-					if (ImGui::Button("Save As")) {
-						if (std::strlen(save_file_name) > 0) {
-							if (!lm::save_rule_as_file(lm::system.rules[i], save_file_name)) {
-								puts("Rule saving failed, no file was created!");
-							}
-						}
-					}
           ImGui::TreePop();
         }
       }
 
-
 			ImGui::Text("nodes: %d", lm::plant.node_count);
-			// ImGui::Checkbox("live Preview", &lm::system.live);
-			// if (ImGui::Button("render")) {
-			//
-			// 	auto t1 = std::chrono::high_resolution_clock::now();
-			// 	for (auto &branch : lm::plant.branches) {
-			// 		draw::wide_line(draw::FrameBuf{(uint32_t*)app::video.window_texture_pixels,
-			// 				app::video.width, app::video.height}, 
-			// 				Line2{*branch.n1, *branch.n2}, color::fg, lm::system.standard_wd);
-			// 	}
-			// 	auto t2 = std::chrono::high_resolution_clock::now();
-			// 	std::chrono::duration<double, std::milli> dt_ms = t2 - t1;
-			// 	std::cout << "dt_out: " << dt_ms << std::endl;
-			// }
 
-			// variables
+			// ---- standard variables ----
 			ImGui::SliderInt("iterations", &lm::system.iterations, 0, 12);
 			if (ImGui::SliderFloat("length", &lm::system.standard_length, 0.0, 200.0)) {
 				lm::plant.needs_regen = true;
@@ -395,26 +333,12 @@ bool update_gui() {
 			if (ImGui::SliderFloat("angle", &lm::system.standard_angle, 0.0, gk::pi * 2.0)) {
 				lm::plant.needs_regen = true;
 			}
+			if (ImGui::SliderInt("Width", &lm::system.standard_wd, 1, 20)) {
+				lm::plant.needs_regen = true;
+			}
 			// ImGui::SliderInt("seg_count", &lm::system.standard_branch_seg_count, 1, 50);
-			ImGui::SliderFloat("wd", &lm::system.standard_wd, 1.0f, 50.0f);
-      if (ImGui::TreeNode("Global Variables")) {
-				for (int i = 0; i < lm::glob_vars.amount; i++) {
-					char label = lm::glob_vars.get_label(i);
-					std::string text_label = fmt::format("Text {}\n", lm::glob_vars.get_label(i));
-					std::string slider_label = fmt::format("Slider {}\n", lm::glob_vars.get_label(i));
-        	ImGui::InputText(text_label.c_str(), lm::glob_vars[i], app::gui.textfield_size);
-					ImGui::SameLine();
-					if (ImGui::SliderFloat(slider_label.c_str(), lm::glob_vars.value(i), 0.0, gk::pi * 2.0)) {
-						std::to_string(*lm::glob_vars.value(i)).copy(lm::glob_vars[i], app::gui.textfield_size);
-						lm::plant.needs_regen = true;
-					}
 
-					// i changed glob vars operator[] to char ** need refactor
-					// make slider for the vars
-				}
-        ImGui::TreePop();
-      }
-
+			// ---- global variables ----
 			for (int i = 0; i < lm::glob_vars.quant; i++) {
 				lm::Var *var = lm::glob_vars.var(i);
 				if (ImGui::Checkbox(fmt::format("{} use slider?", var->label).c_str(),
@@ -438,6 +362,56 @@ bool update_gui() {
 					}
 				}
 			}
+
+			// instead implement serealization for axiom, rules, vars
+			// ---- save files ----
+			// static std::vector<std::string> save_file_names;
+			// if (auto result = lm::scan_saves()) {
+			// 	save_file_names = result.value();
+			// }
+			//
+			//      static ImGuiComboFlags flags1 = 0;
+			// static int save_fname_index = 0;
+			//      const char *combo_preview_value1;
+			// if (save_file_names.size() > 0) {
+			//      	combo_preview_value1 = (save_file_names[save_fname_index]).c_str();
+			// } else {
+			//      	combo_preview_value1 = "NIL";
+			// }
+			//      if (ImGui::BeginCombo("files", combo_preview_value1, flags1)) {
+			//        for (int n = 0; n < (int)save_file_names.size(); n++) {
+			//          const bool is_selected = (save_fname_index == n);
+			//
+			//          if (ImGui::Selectable(save_file_names[n].c_str(), is_selected)) {
+			// 			// execute if gui drop down field is selected
+			//            save_fname_index = n;
+			// 			if (!lm::load_rule_from_file(lm::system.rules[i],
+			// 						save_file_names[save_fname_index])) {
+			// 				std::puts("fail, rule couldnt be loaded");
+			// 			}
+			// 		}
+			//
+			//          // Set the initial focus when opening the combo (scrolling +
+			//          // keyboard navigation focus)
+			//          if (is_selected)
+			//            ImGui::SetItemDefaultFocus();
+			//        }
+			//        ImGui::EndCombo();
+			// }
+
+
+
+			// ---- SAVE_RULE ---- -> this should save whole state instead
+			// static constexpr int text_size = app::Gui::textfield_size;
+			// static char save_file_name[text_size] = ""; // needs be persistant
+			//      ImGui::InputText("save_file", save_file_name, text_size);
+			// if (ImGui::Button("Save As")) {
+			// 	if (std::strlen(save_file_name) > 0) {
+			// 		if (!lm::save_rule_as_file(lm::system.rules[i], save_file_name)) {
+			// 			puts("Rule saving failed, no file was created!");
+			// 		}
+			// 	}
+			// }
 
 
 			// this should not be here as a whole

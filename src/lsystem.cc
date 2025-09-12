@@ -5,6 +5,7 @@ namespace lm {
 void update_vars() {
 	for (int i = glob_vars.quant - 1; i >= 0; i--) {
 		Var *var = glob_vars.var(i);
+		if (*(var->expr) == '\0') { continue; }
 		if (var->use_slider) {
 		} else {
 			std::string glob_var_str = var->expr;
@@ -305,6 +306,7 @@ std::optional<float> _eval_expr(std::string &expr_string, float *x,
 	parser_t parser;
 	if (!parser.compile(expr_string, expr)) {
 		fmt::print("Expression compile error...\n");
+		fmt::print("expr_string: {}\n", expr_string);
 		return {};
 	}
 	return (T)expr.value();
