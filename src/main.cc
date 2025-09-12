@@ -2,7 +2,6 @@
 #include "app.hpp"
 #include "graphics.hpp"
 #include "rasterize.hpp"
-// #include "modules.hpp"
 #include "lsystem.hpp"
 #include <lo/lo.h>
 
@@ -27,7 +26,9 @@ int send(void) {
 // store lines in main? vector<line>
 int main(int argc, char *argv[]) {
 	app::init(960, 540);
+
 	lm::plant.init(Vec2{(double)app::video.width/2, app::video.height - 50.0}, gk::pi / 2);
+	fmt::print("bytes: {}\n", lm::plant.max_nodes * sizeof(Vec2));
 
 	app::gui.clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 	app::gui.show_window_a = true;
@@ -38,16 +39,12 @@ int main(int argc, char *argv[]) {
 
 	draw::FrameBuf fb_main{app::video.window_texture_pixels, app::video.width, app::video.height};
 
-
-	fmt::print("bytes: {}\n", lm::plant.max_nodes * sizeof(Vec2));
-
 	while(app::context.keep_running) {
 		app::context.frame_start = util::Clock::now();
 		process_events();
 		if (!update_gui()) {
 			return 1;
 		}
-		lm::update_vars();
 
 		// where to put this?
 		// -> if strg-down on mouse down save mouse coords as old offset cords
@@ -63,7 +60,10 @@ int main(int argc, char *argv[]) {
 			puts("pan active");
 		}
 
-		// generate a plant over one or more frames
+		// ---- update the global and default variables -> on gui event? ----
+		lm::update_vars();
+
+		// ---- generate plant over one or more frames ----
 		if (lm::plant.needs_regen || lm::plant.regenerating) {
 			if (lm::plant.needs_regen) {
 				print_info("clear plant");
@@ -82,8 +82,7 @@ int main(int argc, char *argv[]) {
 			lm::plant.redrawing = true; // plant_check if redraw
 		}
 
-		// draw a plant over one or more frames
-		// these checks are not right
+		// ---- draw plant over one or more frames ----
 		if (lm::plant.needs_redraw || lm::plant.redrawing) {
 			// how often to clear and the opacity of the plant should be a setting
 			if (lm::plant.needs_redraw) {
@@ -100,6 +99,7 @@ int main(int argc, char *argv[]) {
 			}
 		}
 
+		// ---- push framebuffer and render gui ----
 		render();
 	}
 	cleanup();
@@ -201,9 +201,9 @@ bool update_gui() {
     if (ImGui::Begin("Plant", &app::gui.show_rendering_window,
                      ImGuiWindowFlags_MenuBar)) {
       if (ImGui::TreeNode("Global Variables")) {
-				for (int i = 0; i < lm::glob_vars.amount; i++) {
-					std::string label = fmt::format("{}", lm::glob_vars.get_label(i));
-        	ImGui::InputText(label.c_str(), lm::glob_vars[i], lm::system.text_size);
+				for (int i = 0; i < lm::glob_vars.quant; i++) {
+					lm::Var *var = lm::glob_vars.var(i);
+        	ImGui::InputText(var->label.c_str(), var->expr, lm::system.text_size);
 				}
         ImGui::TreePop();
       }
@@ -415,8 +415,8 @@ bool update_gui() {
         ImGui::TreePop();
       }
 
-			for (int i = 0; i < lm::glob_vars2.quant; i++) {
-				lm::Var *var = lm::glob_vars2.var(i);
+			for (int i = 0; i < lm::glob_vars.quant; i++) {
+				lm::Var *var = lm::glob_vars.var(i);
 				if (ImGui::Checkbox(fmt::format("{} use slider?", var->label).c_str(),
 							&var->use_slider)) {}
 				if (var->use_slider) {
@@ -425,7 +425,7 @@ bool update_gui() {
 							&(var->slider_start));
 					ImGui::InputFloat(fmt::format("{}_max", var->label).c_str(),
 							&(var->slider_end));
-					if (ImGui::SliderFloat(fmt::format("{}_text", var->label).c_str()
+					if (ImGui::SliderFloat(fmt::format("{}_slider", var->label).c_str()
 								, &(var->value),
 							var->slider_start, var->slider_end)) {
 						(var->expr)[0] = '\0';

@@ -15,22 +15,22 @@ struct Args {
 };
 
 struct Var {
-	char label = '\0';
+	std::string label = "";
 	char expr[app::gui.textfield_size];
 	bool use_slider = false;
 	float slider_start = 0.0;
 	float slider_end = 1.0;
 	float value = 0.0;
-	Var(char label) : label{label} {}
+	Var(std::string label) : label{label} {}
 };
 
-struct GlobVars2 {
+struct GlobVars {
 	static constexpr int quant = 5;
-	Var l{'l'};
-	Var m{'m'};
-	Var n{'n'};
-	Var o{'o'};
-	Var p{'p'};
+	Var l{"l"};
+	Var m{"m"};
+	Var n{"n"};
+	Var o{"o"};
+	Var p{"p"};
 	Var* var(const int i) {
 		switch (i) {
 			case 0: return &l;
@@ -41,65 +41,6 @@ struct GlobVars2 {
 			default: return nullptr;
 		}
 	}
-};
-inline GlobVars2 glob_vars2;
-
-struct GlobVars {
-	static constexpr int amount = 5;
-	static constexpr int textfield_size = app::gui.textfield_size;
-	bool l_use_slider = false;
-	float l_slider_start = 0.0;
-	float l_slider_end = 1.0;
-	char l[app::gui.textfield_size];
-	float l_value = 0.0;
-
-
-
-
-	char m[app::gui.textfield_size];
-	char n[app::gui.textfield_size];
-	char o[app::gui.textfield_size];
-	char p[app::gui.textfield_size];
-	float m_value = 0.0;
-	float n_value = 0.0;
-	float o_value = 0.0;
-	float p_value = 0.0;
-
-	constexpr char* operator[](const int i) noexcept {
-		switch (i) {
-			case 0: return l;
-			case 1: return m;
-			case 2: return n;
-			case 3: return o;
-			case 4: return p;
-			default: return nullptr;
-		}
-	}
-	float* value(const int i) {
-		switch (i) {
-			case 0: return &l_value;
-			case 1: return &m_value;
-			case 2: return &n_value;
-			case 3: return &o_value;
-			case 4: return &p_value;
-			default: return nullptr;
-		}
-	}
-
-	char get_label(const int i) {
-		switch (i) {
-			case 0: return 'l';
-			case 1: return 'm';
-			case 2: return 'n';
-			case 3: return 'o';
-			case 4: return 'p';
-			default: return '\0';
-		}
-	}
-	// for all default values and global vars do:
-	// [var text field] [var slider, expo || log || normal]
-	// > Defaults []
-	// > GlobVars []
 };
 inline GlobVars glob_vars;
 
@@ -113,14 +54,14 @@ struct Branch {
 
 struct Turtle {
 	Vec2 *node = nullptr;
-	double angle{};
+	float angle{};
 	Turtle() = default;
-	Turtle(Vec2 *node, const double angle) : node{node}, angle{angle} {}
+	Turtle(Vec2 *node, const float angle) : node{node}, angle{angle} {}
 };
 
 struct Plant {
 	Vec2 start_node{};
-	double start_angle{};
+	float start_angle{};
 
 	static const std::size_t max_nodes = 1000000; // mil
 	// std::unique_ptr<Vec2[]> nodes; // heap array
@@ -133,7 +74,7 @@ struct Plant {
 	std::vector<Turtle> turtle_stack;
 
 	Plant() = default;
-	Plant(const Vec2 start_node, const double start_angle) :
+	Plant(const Vec2 start_node, const float start_angle) :
 		start_node{start_node}, start_angle{start_angle}
 		// nodes{std::make_unique<Vec2[]>(max_nodes)} 
 	{
@@ -141,7 +82,7 @@ struct Plant {
 		turtle.angle = start_angle;
 	}
 
-	void init(const Vec2 start_node_, const double start_angle_) {
+	void init(const Vec2 start_node_, const float start_angle_) {
 		start_node = start_node_;
 		start_angle = start_angle_;
 		turtle.node = add_node(start_node_);
@@ -184,7 +125,7 @@ struct System {
 
 	static constexpr int n_parameters = 4;
 	char parameter_strings[n_parameters][text_size] = { "0.0", "0.0", "0.0", "0.0" };
-	std::array<double, n_parameters> parameters;
+	std::array<float, n_parameters> parameters;
 
 	// A-K
   const char *alphabet[alphabet_size] = { "A", "a", "B", "b", "+", "-" };
@@ -217,12 +158,12 @@ inline Plant plant;
 
 // generate plant from lstring
 
-// std::optional<double> _eval_expr(std::string &expr_string, const double in_x);
-std::optional<double> _eval_expr(std::string &expr_string, double *x,
-																 double *y, double *z);
-Vec2 _calculate_move(Turtle &turtle, const double length);
-void _turn(Turtle &turtle, const double angle);
-void _turtle_action(Plant &plant, const char c, const double *value);
+// std::optional<float> _eval_expr(std::string &expr_string, const float in_x);
+std::optional<float> _eval_expr(std::string &expr_string, float *x,
+																 float *y, float *z);
+Vec2 _calculate_move(Turtle &turtle, const float length);
+void _turn(Turtle &turtle, const float angle);
+void _turtle_action(Plant &plant, const char c, const float *value);
 Plant generate_plant(const Vec2 start, const std::string lstring);
 bool generate_plant_timed(const std::string &lstring, Plant &plant, 
 		int &current_index);
@@ -253,9 +194,9 @@ std::string arg_rulearg_substitute(const std::string arg, const std::string rule
 std::string _maybe_apply_rule(const char symbol, const std::string args);
 
 // calculate x,y,z args for a symbol, if x = 0.0 -> error, y,z default to 0.0
-std::array<double, 3> symbol_eval_args(const char symbol, const std::string &args);
+std::array<float, 3> symbol_eval_args(const char symbol, const std::string &args);
 
-std::optional<double> get_default(const char symbol);
+std::optional<float> get_default(const char symbol);
 
 void update_vars();
 

@@ -3,8 +3,8 @@
 
 namespace lm {
 void update_vars() {
-	for (int i = glob_vars2.quant - 1; i >= 0; i--) {
-		Var *var = glob_vars2.var(i);
+	for (int i = glob_vars.quant - 1; i >= 0; i--) {
+		Var *var = glob_vars.var(i);
 		if (var->use_slider) {
 		} else {
 			std::string glob_var_str = var->expr;
@@ -13,18 +13,18 @@ void update_vars() {
 	}
 }
 
-Vec2 _calculate_move(Turtle &turtle, const double length) {
+Vec2 _calculate_move(Turtle &turtle, const float length) {
 	// how to do this without trig?
 	Vec2 position = *turtle.node;
 	position.x += length * cos(turtle.angle);
 	position.y += length * -sin(turtle.angle);
 	return position;
 }
-void _turn(Turtle &turtle, const double angle) { turtle.angle += angle; }
+void _turn(Turtle &turtle, const float angle) { turtle.angle += angle; }
 
 
 // this could return possible defaults for all 3 vars
-std::optional<double> get_default(const char symbol) {
+std::optional<float> get_default(const char symbol) {
 	if (std::isalpha(symbol)) {
 		return lm::system.standard_length;
 	}
@@ -36,12 +36,12 @@ std::optional<double> get_default(const char symbol) {
 }
 
 // if args are empty returns default or 0.0
-std::array<double, 3> symbol_eval_args(const char symbol, const std::string &args_str) {
+std::array<float, 3> symbol_eval_args(const char symbol, const std::string &args_str) {
 	auto result = get_default(symbol);
 	if (result == std::nullopt) { return {}; }
-	double x_default = result.value();
+	float x_default = result.value();
 
-	std::array<double, 3> defaults{ x_default, 0.0, 0.0 };
+	std::array<float, 3> defaults{ x_default, 0.0, 0.0 };
 
 	Args args{};
  	int n_args = 0;
@@ -55,13 +55,13 @@ std::array<double, 3> symbol_eval_args(const char symbol, const std::string &arg
 	}
 
 	// x,y,z values to return
-	std::array<double, 3> values{ 0.0, 0.0, 0.0 };
+	std::array<float, 3> values{ 0.0, 0.0, 0.0 };
 
 	// if x or default: n_args = 1, if x,y n_args = 2, and then 3
 	for (int i = n_args - 1; i >= 0; i--) {
-		double &value = values[i];
+		float &value = values[i];
 		// depending on the current arg querry allready calculated values
-		double *x, *y, *z;
+		float *x, *y, *z;
 		// i could make x,y,z a vector<> size n_args
 		x = nullptr;
 		if (i == 2) {
@@ -160,13 +160,13 @@ void _turtle_action(Plant &plant, const char symbol, const std::string args) {
 	Turtle &turtle = plant.turtle;
 	std::vector<Turtle> &turtle_stack = plant.turtle_stack;
 
-	std::array<double, 3> args_ary{};
+	std::array<float, 3> args_ary{};
 	if (symbol != '[' && symbol != ']') {
 		args_ary = symbol_eval_args(symbol, args);
 	}
-	double x = args_ary[0];
-	double y = args_ary[1];
-	double z = args_ary[2];
+	float x = args_ary[0];
+	float y = args_ary[1];
+	float z = args_ary[2];
 
 	// grow branch
 	if (std::isalpha(symbol)) {
@@ -280,38 +280,33 @@ bool draw_plant_timed(const lm::Plant &plant, int &current_branch,
 	return true;
 }
 
-std::optional<double> _eval_expr(std::string &expr_string, double *x,
-																 double *y, double *z) {
-	typedef double T; // numeric type (float, double, mpfr etc...)
-
+std::optional<float> _eval_expr(std::string &expr_string, float *x,
+																 float *y, float *z) {
+	typedef float T;
 	typedef exprtk::symbol_table<T> symbol_table_t;
 	typedef exprtk::expression<T>   expression_t;
 	typedef exprtk::parser<T>       parser_t;
 	symbol_table_t symbol_table;
 
+	// add symbol args to symbol table, if given
 	if (x) { symbol_table.add_variable("x", *x); }
 	if (y) { symbol_table.add_variable("y", *y); }
 	if (z) { symbol_table.add_variable("z", *z); }
 
-	// this will not work at all, the vars need to be expanded allready when this is called
-	// the vars can reference themselves in reverse tough
-	// i also should maybe not at all use double here since ImGui expects float
-	// TODO: vars get not updated!
-	for (int i = glob_vars2.quant - 1; i >= 0; i--) {
-		Var *var = glob_vars2.var(i);
-		double value = var->value;
-		symbol_table.add_variable(fmt::format("{}", var->label), value);
+	// add global vars to symbol table
+	for (int i = glob_vars.quant - 1; i >= 0; i--) {
+		Var *var = glob_vars.var(i);
+		symbol_table.add_variable(var->label, var->value);
 	}
 
+	// parse expression
 	expression_t expr;
 	expr.register_symbol_table(symbol_table);
-
 	parser_t parser;
 	if (!parser.compile(expr_string, expr)) {
 		fmt::print("Expression compile error...\n");
 		return {};
 	}
-
 	return (T)expr.value();
 }
 
@@ -669,7 +664,7 @@ std::string _maybe_apply_rule(const char symbol, const std::string args) {
 
 	// auto result = get_default(symbol);
 	// if (result == std::nullopt) { return ""; }
-	// double x_default = result.value();
+	// float x_default = result.value();
 
 	// ---- extract args of symbol ----
 	std::string x = "";
