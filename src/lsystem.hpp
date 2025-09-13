@@ -138,7 +138,7 @@ struct System {
 	struct Rule {
 		int symbol_index = 0;
 		int n_args = 1;
-		char condition[text_size] = "0.0";
+		char condition[text_size] = { '\0' };
 		util::STATE condition_state = util::STATE::FALSE;
 		char text[text_size] = "";
 	};

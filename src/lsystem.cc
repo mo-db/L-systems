@@ -706,19 +706,20 @@ std::string _maybe_apply_rule(const char symbol, const std::string args) {
 		// if (rule.n_args != n_args) { continue; }
 
 		// TODO: check against condition
-
-		// if (auto result = _eval_expr(condition, 1.0)) {
-		// 	if (util::equal_epsilon(result.value(), 1.0)) {
-		// 		rule.condition_state = Lsystem::FIELD_STATE::TRUE;
-		// 	} else {
-		// 		rule.condition_state = Lsystem::FIELD_STATE::FALSE;
-		// 	}
-		// } else {
-		// 	rule.condition_state = Lsystem::FIELD_STATE::ERROR;
-		// }
-
-		// rule.condition_state = util::STATE::TRUE;
-		// if (rule.condition_state != util::STATE::TRUE) { continue; }
+		if (!condition.empty()) {
+			std::array<float, 3> args_ary = symbol_eval_args(symbol, args);
+			auto result = _eval_expr(condition, &args_ary[0], &args_ary[1],
+					&args_ary[2]);
+			if (!result) {
+				// TODO: HALT_GENERATION
+				rule.condition_state = util::STATE::ERROR;
+				continue;
+			} else {
+				if (!util::equal_epsilon(result.value(), 1.0)) {
+					continue;
+				}
+			}
+		}
 
 		// ---- rule matched -> replace symbol with rule ----
 		std::string return_str = "";
