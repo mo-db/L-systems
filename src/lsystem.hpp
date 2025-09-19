@@ -49,12 +49,16 @@ struct Branch {
 	Vec2 *n2 = nullptr;
 	char branch_type;
 	bool visible = false;
-	float wd = 0.0;
+	int wd = 0.0;
 };
 
+// the turtle holds all relevant information for drawing a branch
 struct Turtle {
 	Vec2 *node = nullptr;
 	float angle{};
+	//TODO
+	int width = 2; //use float to enable antialiasing later on
+	// some means of color variable
 	Turtle() = default;
 	Turtle(Vec2 *node, const float angle) : node{node}, angle{angle} {}
 };
@@ -87,6 +91,7 @@ struct Plant {
 		start_angle = start_angle_;
 		turtle.node = add_node(start_node_);
 		turtle.angle = start_angle_;
+		//turtle.width = 2; // TODO
 	}
 
 	Vec2 *add_node(Vec2 node) {
@@ -105,9 +110,12 @@ struct Plant {
 	void clear() {
 		branches.clear();
 		node_count = 0;
+		// TODO
+		// turtle.clear()
 		turtle.node = add_node(start_node);
 		turtle.angle = start_angle;
 		turtle_stack.clear();
+		turtle.width = 2; // TODO
 	}
 };
 

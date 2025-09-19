@@ -32,6 +32,10 @@ std::optional<float> get_default(const char symbol) {
 	if (symbol == '-' || symbol == '+') {
 		return lm::system.standard_angle;
 	}
+	// TODO
+	if (symbol == '%') {
+		return 0.0;
+	}
 	print_info("lstring contains undefined symbol");
 	return {};
 }
@@ -165,6 +169,7 @@ void _turtle_action(Plant &plant, const char symbol, const std::string args) {
 	if (symbol != '[' && symbol != ']') {
 		args_ary = symbol_eval_args(symbol, args);
 	}
+	// TODO why dont i use y and z here?
 	float x = args_ary[0];
 	float y = args_ary[1];
 	float z = args_ary[2];
@@ -176,11 +181,11 @@ void _turtle_action(Plant &plant, const char symbol, const std::string args) {
 			visable = false;
 		}
 
-		// check nodes limit
+		// check nodes limit -> create branch 
 		if (plant.node_count < plant.max_nodes) {
 			Vec2 *last_node = turtle.node;
 			Vec2 *new_node = plant.add_node(_calculate_move(turtle, x));
-    	plant.branches.push_back(Branch{last_node, new_node, symbol, visable, 1.0});
+    	plant.branches.push_back(Branch{last_node, new_node, symbol, visable, turtle.width});
 			turtle.node = new_node;
 		} else {
 			std::exit(1);
@@ -195,6 +200,12 @@ void _turtle_action(Plant &plant, const char symbol, const std::string args) {
 	// turn turtle clockwise
 	if (symbol == '+') {
     _turn(turtle, x);
+	}
+
+	// TODO
+	// this should either set or change the width
+	if (symbol == '%') {
+		turtle.width += 1;
 	}
 
 	// push and pop turtle state
@@ -276,7 +287,7 @@ bool draw_plant_timed(const lm::Plant &plant, int &current_branch,
 		}
 
 		auto &branch = plant.branches[i];
-		draw::wide_line(fb, Line2{*branch.n1, *branch.n2}, color, lm::system.standard_wd);
+		draw::wide_line(fb, Line2{*branch.n1, *branch.n2}, color, branch.wd);
 	}
 	return true;
 }
