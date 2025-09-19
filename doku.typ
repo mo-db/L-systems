@@ -31,6 +31,9 @@
 - is responsible for generating the plant out of the lstring
 - holds all information of the plant a given node
 
+== Imgui
+- all imgui text fields should be char\*
+
 == components
 - the L-String is generated via button press or at leas seperatly and first
 - Structures are generated and drawn over one or more frames

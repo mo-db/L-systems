@@ -10,6 +10,7 @@ imgui_sources = [
   'imgui_widgets.cpp',
   'imgui_tables.cpp',
   'imgui_demo.cpp',
+  'imgui_stdlib.cpp',
 ]
 
 # static library so the parent can link to it

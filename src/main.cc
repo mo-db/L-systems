@@ -5,6 +5,7 @@
 #include "lsystem.hpp"
 #include <lo/lo.h>
 
+
 void process_events();
 void lock_frame_buf();
 bool update_gui();
@@ -337,6 +338,11 @@ bool update_gui() {
 				lm::plant.needs_regen = true;
 			}
 			// ImGui::SliderInt("seg_count", &lm::system.standard_branch_seg_count, 1, 50);
+
+
+			// testing
+			static std::string test = "test";
+			if (ImGui::CustInputText("testlabel", &test)) {}
 
 			// ---- global variables ----
 			for (int i = 0; i < lm::glob_vars.quant; i++) {
