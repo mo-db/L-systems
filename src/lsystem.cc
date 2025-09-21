@@ -181,6 +181,7 @@ void _turtle_action(Plant &plant, const char symbol, const std::string args) {
 			visable = false;
 		}
 
+		// TODO remove this in favour to implementation inside plant -> grow()
 		// check nodes limit -> create branch 
 		if (plant.node_count < plant.max_nodes) {
 			Vec2 *last_node = turtle.node;

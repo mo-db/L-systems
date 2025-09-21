@@ -3,6 +3,7 @@
 #include "graphics.hpp"
 #include "rasterize.hpp"
 #include "lsystem.hpp"
+#include "lsystem_new.hpp"
 #include <lo/lo.h>
 
 
@@ -27,6 +28,14 @@ int send(void) {
 // store lines in main? vector<line>
 int main(int argc, char *argv[]) {
 	app::init(960, 540);
+
+	// this should be per mouse click in the gui
+	// [add new system] -> select start-point
+	fmt::print("complexes size: {}\n", lsystem_new::complexes.size());
+	lsystem_new::complexes.push_back(
+			lsystem_new::Complex{lsystem_new::Plant{Vec2{(double)app::video.width/2,
+			app::video.height - 50.0}, gk::pi / 2}, lsystem_new::LstringSpec{}});
+	fmt::print("complexes size: {}\n", lsystem_new::complexes.size());
 
 	lm::plant.init(Vec2{(double)app::video.width/2, app::video.height - 50.0}, gk::pi / 2);
 	fmt::print("bytes: {}\n", lm::plant.max_nodes * sizeof(Vec2));
@@ -189,15 +198,71 @@ bool update_gui() {
     ImGui::ShowDemoWindow(&app::gui.show_window_a);
   }
 
-	if (app::gui.show_lsystem_window) {
+  if (app::gui.show_lsystem_window) {
     ImGui::SetNextWindowSize(ImVec2(500, 440), ImGuiCond_FirstUseEver);
     if (ImGui::Begin("L-System", &app::gui.show_lsystem_window,
                      ImGuiWindowFlags_MenuBar)) {
-		}
-    ImGui::End();
-	}
+      static std::vector<int> active_tabs;
+      static int next_tab_id = 0;
+      // Initialize with default tab
+      if (next_tab_id == 0) {
+        active_tabs.push_back(next_tab_id++);
+      }
 
-	if (app::gui.show_rendering_window) {
+      static ImGuiTabBarFlags tab_bar_flags =
+          ImGuiTabBarFlags_AutoSelectNewTabs | ImGuiTabBarFlags_Reorderable |
+          ImGuiTabBarFlags_FittingPolicyShrink;
+      static bool show_leading_button = true;
+      static bool show_trailing_button = true;
+      ImGui::Checkbox("Show Leading TabItemButton()", &show_leading_button);
+      ImGui::Checkbox("Show Trailing TabItemButton()", &show_trailing_button);
+
+      if (ImGui::BeginTabBar("Complexes", tab_bar_flags)) {
+
+        // Leading TabItemButton(): click the "?" button to open a menu
+        if (show_leading_button) {
+          if (ImGui::TabItemButton("?", ImGuiTabItemFlags_Leading |
+                                            ImGuiTabItemFlags_NoTooltip)) {
+            ImGui::OpenPopup("MyHelpMenu");
+          }
+        }
+        if (ImGui::BeginPopup("MyHelpMenu")) {
+          ImGui::Selectable("Hello!");
+          ImGui::EndPopup();
+        }
+
+				// Trailing TabItemButton() to add tabs
+        if (show_trailing_button) {
+          if (ImGui::TabItemButton("+", ImGuiTabItemFlags_Trailing |
+                                            ImGuiTabItemFlags_NoTooltip)) {
+            active_tabs.push_back(next_tab_id++);
+          }
+        }
+
+        // Submit our regular tabs
+        for (int i = 0; i < active_tabs.size();) {
+          bool open = true;
+          std::string name = fmt::format("{}", active_tabs[i]);
+          if (ImGui::BeginTabItem(name.c_str(), &open,
+                                  ImGuiTabItemFlags_None)) {
+            // implement complex here: update_complex();
+            ImGui::Text("This is the %s tab!", name.c_str());
+            ImGui::EndTabItem();
+          }
+
+          if (!open) {
+            active_tabs.erase(active_tabs.begin() + i);
+          } else {
+            i++;
+          }
+        }
+        ImGui::EndTabBar();
+      }
+    }
+    ImGui::End();
+  }
+
+        if (app::gui.show_rendering_window) {
     ImGui::SetNextWindowSize(ImVec2(500, 440), ImGuiCond_FirstUseEver);
     if (ImGui::Begin("Plant", &app::gui.show_rendering_window,
                      ImGuiWindowFlags_MenuBar)) {
