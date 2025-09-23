@@ -42,3 +42,6 @@
      they dont need to be regenerated on viewport changes. Maybe
      this can be done with blending?"
 - 
+== interesting systems
+- A -> A[-A]A
+- - -> -[A-A]-

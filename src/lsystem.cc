@@ -752,16 +752,24 @@ std::string _maybe_apply_rule(Module &module, const char symbol, const std::stri
 	return default_return; 
 }
 
-std::string expand_lstring(Module module, const std::string &lstring) {
-	auto &current_iteration = module.lstring_spec.current_iteration;
-	// exit early on first iteration
-	if (current_iteration == 0) {
-		current_iteration++;
-		return module.lstring_spec.axiom;
+State generate_lstring(Module &module) {
+	for (int i = 0; i < module.lstring_spec.iterations; i++) {
+		State s = expand_lstring(module);
+		if (s == State::Error) { return s; }
 	}
+	return State::True;
+}
+
+State expand_lstring(Module &module) {
+	auto &current_iteration = module.lstring_spec.current_iteration;
+
+	std::string &lstring = module.lstring;
+	if (!module.generation_started) {
+		lstring.assign(module.lstring_spec.axiom);
+	}
+  std::string lstring_expanded = "";
 
 	// expand lstring and save into lstring_expanded
-  std::string lstring_expanded = "";
 	int index = 0;
 	while (index < lstring.size()) {
 		char c = lstring[index];
@@ -779,7 +787,7 @@ std::string expand_lstring(Module module, const std::string &lstring) {
 				std::string args = util::get_substr(lstring, index, '>');
 				if (args.empty()) {
 					print_info("lstring invalid, expand failed");
-					return "";
+					return State::False;
 				}
 				lstring_expanded += _maybe_apply_rule(module, c, args);
 				index += args.size() + 1; // move to after '>'
@@ -788,7 +796,8 @@ std::string expand_lstring(Module module, const std::string &lstring) {
 	}
 	// replace lstring with lstring_expanded and return
 	current_iteration++;
-	return lstring_expanded;
+	module.lstring = lstring_expanded;
+	return State::True;
 }
 
 

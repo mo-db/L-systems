@@ -9,7 +9,7 @@
 
 void process_events();
 void lock_frame_buf();
-bool update_gui();
+State update_gui();
 void render();
 void cleanup();
 
@@ -28,44 +28,40 @@ int send(void) {
 // store lines in main? vector<line>
 int main(int argc, char *argv[]) {
 	app::init(960, 540);
+	draw::FrameBuf fb_main{app::video.window_texture_pixels,
+												 app::video.width, app::video.height};
 
-	// this should be per mouse click in the gui
-	// [add new system] -> select start-point
-
-	// lm::plant.init(Vec2{(double)app::video.width/2, app::video.height - 50.0}, gk::pi / 2);
-	// fmt::print("bytes: {}\n", lm::plant.max_nodes * sizeof(Vec2));
-
-	app::gui.clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
-	app::gui.show_window_a = true;
-	app::gui.show_window_b = true;
-	app::gui.show_window_c = true;
-	app::gui.show_rendering_window = true;
 	app::gui.show_lsystem_window = true;
-
-	draw::FrameBuf fb_main{app::video.window_texture_pixels, app::video.width, app::video.height};
+	app::gui.show_demo_window = true;
 
 	while(app::context.keep_running) {
 		app::context.frame_start = util::Clock::now();
 		app::update_state_queues();
 		process_events();
-		if (!update_gui()) {
-			return 1;
+
+		{
+			State s = update_gui();
+			if (s == State::Error) { return 1;}
 		}
 
 		// where to put this?
 		// -> if strg-down on mouse down save mouse coords as old offset cords
 		// -> every frame calculate offset with old mouse coords to new mouse
 		// position
-		if (!viewport::update_vars()) {
-			// puts("wtf?");
+		{ 
+			State s = viewport::update_panning();
+			if (s == State::Error) { return 1; }
 		}
-		// fmt::print("offset: {},{}\n", viewport::vars.xy_offset.x, viewport::vars.xy_offset.y);
+
+		fmt::print("viewport offset: {},{}\n", viewport::spec.xy_offset.x,
+							 viewport::spec.xy_offset.y);
+
 		// panning must be changed so it doesnt redraw, it has to use pixels and scale
-		if (viewport::vars.panning_active) {
+		if (viewport::spec.panning_active) {
 			for (auto &[key, module] : lsystem_new::modules) {
 				module.plant.needs_regen = true;
 			}
-			puts("pan active");
+			// puts("pan active");
 		}
 
 		// ---- update the global and default variables -> on gui event? ----
@@ -216,18 +212,14 @@ struct GuiModuleSpec {
 	bool wait_for_coordinates{false};
 };
 
-bool gui_update_module() {
-	return true;
-}
-
-bool update_gui() {
+State update_gui() {
   ImGui_ImplSDLRenderer3_NewFrame();
   ImGui_ImplSDL3_NewFrame();
   ImGui::NewFrame();
 
   // window_a
-  if (app::gui.show_window_a) {
-    ImGui::ShowDemoWindow(&app::gui.show_window_a);
+  if (app::gui.show_demo_window) {
+    ImGui::ShowDemoWindow(&app::gui.show_demo_window);
   }
 
   // ___LSYSTEM_MAIN___
@@ -301,15 +293,18 @@ bool update_gui() {
 
 						lsystem_new::Module &module = lsystem_new::modules.at(tab.module_id);
 						if (ImGui::Button("Generate L-String")) {
-								module.lstring = module.lstring_spec.generate(module.lstring);
+							module.generation_started = true;
+							State s = lsystem_new::generate_lstring(module);
+							if (s == State::Error) { return s; }
 						}
-						ImGui::SameLine();
-						if (ImGui::Button("Expand L-String")) {
-								module.lstring = lsystem_new::expand_lstring(module, module.lstring);
-							module.plant.needs_regen = true;
-						}
+						// ImGui::SameLine();
+						// if (ImGui::Button("Expand L-String")) {
+						// 		module.lstring = lsystem_new::expand_lstring(module, module.lstring);
+						// 	module.plant.needs_regen = true;
+						// }
 						ImGui::SameLine();
 						if (ImGui::Button("Clear L-String")) {
+							module.generation_started = false;
 							module.lstring_spec.current_iteration = 0;
 							module.lstring.clear();
 						}
@@ -322,8 +317,14 @@ bool update_gui() {
 						}
 
 						// ___AXIOM___
+						// TODO
 						if (ImGui::TreeNode("Axiom")) {
-							ImGui::InputText("text", module.lstring_spec.axiom, app::gui.textfield_size);
+							if (ImGui::InputText("text", module.lstring_spec.axiom, app::gui.textfield_size)) {
+								if (!module.lstring_spec.generation_started) {
+									lsystem_new::expand_lstring(module);
+									module.plant.needs_regen = true;
+								}
+							}
 							ImGui::TreePop();
 						}
 
@@ -360,13 +361,26 @@ bool update_gui() {
 									ImGui::EndCombo();
 								}
 
-								ImGui::InputText("condition", rule.textfield_condition,
-																 app::gui.textfield_size);
-								ImGui::InputText("rule", rule.textfield_rule, 
-																 app::gui.textfield_size);
+								// TODO
+								if (ImGui::InputText("condition", rule.textfield_condition,
+																 app::gui.textfield_size)) {
+									if (!module.lstring_spec.generation_started) {
+										lsystem_new::expand_lstring(module);
+										module.plant.needs_regen = true;
+									}
+								}
+								if (ImGui::InputText("rule", rule.textfield_rule, 
+																 app::gui.textfield_size)) {
+									if (!module.lstring_spec.generation_started) {
+										lsystem_new::expand_lstring(module);
+										module.plant.needs_regen = true;
+									}
+								}
 								ImGui::TreePop();
 							}
 						}
+
+						ImGui::SliderInt("Iterations", &module.lstring_spec.iterations, 1, 16);
 
 						// ---- default variables ----
 						for (int i = 0; i < module.default_vars.size(); i++) {
@@ -420,8 +434,6 @@ bool update_gui() {
 						ImGui::EndTabItem();
 					}
 
-
-
           if (!open) {
             // active_tabs.erase(active_tabs.begin() + i);
 						if (!lsystem_new::remove_module((gui_module_spec.tabs.begin() + i)->module_id)) {
@@ -439,105 +451,105 @@ bool update_gui() {
   }
 
 
-  // ___LSYSTEM_MAIN___
-  static bool open2 = true;
-  bool *p_open2 = &open2;
-  if (app::gui.show_window_c) {
-
-    // ___MENU_BAR___
-    ImGui::SetNextWindowSize(ImVec2(500, 440), ImGuiCond_FirstUseEver);
-    if (ImGui::Begin("Example: Simple layout", p_open2,
-                     ImGuiWindowFlags_MenuBar)) {
-      if (ImGui::BeginMenuBar()) {
-        if (ImGui::BeginMenu("File")) {
-          if (ImGui::MenuItem("Close", "Ctrl+W")) {
-            *p_open = false;
-          }
-          ImGui::EndMenu();
-        }
-        ImGui::EndMenuBar();
-      }
-
-			// instead implement serealization for axiom, rules, vars
-			// ---- save files ----
-			// static std::vector<std::string> save_file_names;
-			// if (auto result = lm::scan_saves()) {
-			// 	save_file_names = result.value();
-			// }
-			//
-			//      static ImGuiComboFlags flags1 = 0;
-			// static int save_fname_index = 0;
-			//      const char *combo_preview_value1;
-			// if (save_file_names.size() > 0) {
-			//      	combo_preview_value1 = (save_file_names[save_fname_index]).c_str();
-			// } else {
-			//      	combo_preview_value1 = "NIL";
-			// }
-			//      if (ImGui::BeginCombo("files", combo_preview_value1, flags1)) {
-			//        for (int n = 0; n < (int)save_file_names.size(); n++) {
-			//          const bool is_selected = (save_fname_index == n);
-			//
-			//          if (ImGui::Selectable(save_file_names[n].c_str(), is_selected)) {
-			// 			// execute if gui drop down field is selected
-			//            save_fname_index = n;
-			// 			if (!lm::load_rule_from_file(lm::system.rules[i],
-			// 						save_file_names[save_fname_index])) {
-			// 				std::puts("fail, rule couldnt be loaded");
-			// 			}
-			// 		}
-			//
-			//          // Set the initial focus when opening the combo (scrolling +
-			//          // keyboard navigation focus)
-			//          if (is_selected)
-			//            ImGui::SetItemDefaultFocus();
-			//        }
-			//        ImGui::EndCombo();
-			// }
-
-
-
-			// ---- SAVE_RULE ---- -> this should save whole state instead
-			// static constexpr int text_size = app::Gui::textfield_size;
-			// static char save_file_name[text_size] = ""; // needs be persistant
-			//      ImGui::InputText("save_file", save_file_name, text_size);
-			// if (ImGui::Button("Save As")) {
-			// 	if (std::strlen(save_file_name) > 0) {
-			// 		if (!lm::save_rule_as_file(lm::system.rules[i], save_file_name)) {
-			// 			puts("Rule saving failed, no file was created!");
-			// 		}
-			// 	}
-			// }
-
-
-			// this should not be here as a whole
-			// if (ImGui::Button("render to images")) {
-			// 	int frames = 320;
-			// 	int width = 640;
-			// 	int height = 480;
-			// 	SDL_Surface *frame_surf = SDL_CreateSurface(width, height, SDL_PIXELFORMAT_RGBA32);
-			// 	for (int i = 0; i < frames; i ++) {
-			// 		lm::system.standard_angle -= 0.003;
-			//      	SDL_FillSurfaceRect(frame_surf, nullptr, 0xFF000000);
-			// 		lm::system.lstring = lm::generate_lstring();
-			// 		lm::system.plant = lm::generate_plant(Vec2{(double)width * 0.5,
-			// 				(double)height * 0.9}, "placeholder");
-			// 		for (auto &branch : lm::system.lm::plant.branches) {
-			// 			draw::wide_line(draw::FrameBuf{(uint32_t*)frame_surf->pixels,
-			// 					frame_surf->w, frame_surf->h}, 
-			// 					Line2{*branch.n1, *branch.n2}, 0xFFFF00FF, lm::system.standard_wd);
-			// 		}
-			//
-			// 		fmt::print("{}/frame{:06}\n", app::context.render_path, i);
-			// 		std::string frame_file = fmt::format("{}/frame{:06}.png", app::context.render_path, i);
-			// 		assert(IMG_SavePNG(frame_surf, frame_file.c_str()));
-			// 		// assert(SDL_SaveBMP(frame_surf, frame_file.c_str()));
-			// 	}
-			// 	SDL_DestroySurface(frame_surf);
-			// }
-		}
-    ImGui::End();
-  }
-	return true;
+  // // ___LSYSTEM_MAIN___
+  // static bool open2 = true;
+  // bool *p_open2 = &open2;
+  // if (app::gui.show_window_c) {
+  //
+  //   // ___MENU_BAR___
+  //   ImGui::SetNextWindowSize(ImVec2(500, 440), ImGuiCond_FirstUseEver);
+  //   if (ImGui::Begin("Example: Simple layout", p_open2,
+  //                    ImGuiWindowFlags_MenuBar)) {
+  //     if (ImGui::BeginMenuBar()) {
+  //       if (ImGui::BeginMenu("File")) {
+  //         if (ImGui::MenuItem("Close", "Ctrl+W")) {
+  //           *p_open = false;
+  //         }
+  //         ImGui::EndMenu();
+  //       }
+  //       ImGui::EndMenuBar();
+  //     }
+  //
+  // 	// instead implement serealization for axiom, rules, vars
+  // 	// ---- save files ----
+  // 	// static std::vector<std::string> save_file_names;
+  // 	// if (auto result = lm::scan_saves()) {
+  // 	// 	save_file_names = result.value();
+  // 	// }
+  // 	//
+  // 	//      static ImGuiComboFlags flags1 = 0;
+  // 	// static int save_fname_index = 0;
+  // 	//      const char *combo_preview_value1;
+  // 	// if (save_file_names.size() > 0) {
+  // 	//      	combo_preview_value1 = (save_file_names[save_fname_index]).c_str();
+  // 	// } else {
+  // 	//      	combo_preview_value1 = "NIL";
+  // 	// }
+  // 	//      if (ImGui::BeginCombo("files", combo_preview_value1, flags1)) {
+  // 	//        for (int n = 0; n < (int)save_file_names.size(); n++) {
+  // 	//          const bool is_selected = (save_fname_index == n);
+  // 	//
+  // 	//          if (ImGui::Selectable(save_file_names[n].c_str(), is_selected)) {
+  // 	// 			// execute if gui drop down field is selected
+  // 	//            save_fname_index = n;
+  // 	// 			if (!lm::load_rule_from_file(lm::system.rules[i],
+  // 	// 						save_file_names[save_fname_index])) {
+  // 	// 				std::puts("fail, rule couldnt be loaded");
+  // 	// 			}
+  // 	// 		}
+  // 	//
+  // 	//          // Set the initial focus when opening the combo (scrolling +
+  // 	//          // keyboard navigation focus)
+  // 	//          if (is_selected)
+  // 	//            ImGui::SetItemDefaultFocus();
+  // 	//        }
+  // 	//        ImGui::EndCombo();
+  // 	// }
+  //
+  //
+  //
+  // 	// ---- SAVE_RULE ---- -> this should save whole state instead
+  // 	// static constexpr int text_size = app::Gui::textfield_size;
+  // 	// static char save_file_name[text_size] = ""; // needs be persistant
+  // 	//      ImGui::InputText("save_file", save_file_name, text_size);
+  // 	// if (ImGui::Button("Save As")) {
+  // 	// 	if (std::strlen(save_file_name) > 0) {
+  // 	// 		if (!lm::save_rule_as_file(lm::system.rules[i], save_file_name)) {
+  // 	// 			puts("Rule saving failed, no file was created!");
+  // 	// 		}
+  // 	// 	}
+  // 	// }
+  //
+  //
+  // 	// this should not be here as a whole
+  // 	// if (ImGui::Button("render to images")) {
+  // 	// 	int frames = 320;
+  // 	// 	int width = 640;
+  // 	// 	int height = 480;
+  // 	// 	SDL_Surface *frame_surf = SDL_CreateSurface(width, height, SDL_PIXELFORMAT_RGBA32);
+  // 	// 	for (int i = 0; i < frames; i ++) {
+  // 	// 		lm::system.standard_angle -= 0.003;
+  // 	//      	SDL_FillSurfaceRect(frame_surf, nullptr, 0xFF000000);
+  // 	// 		lm::system.lstring = lm::generate_lstring();
+  // 	// 		lm::system.plant = lm::generate_plant(Vec2{(double)width * 0.5,
+  // 	// 				(double)height * 0.9}, "placeholder");
+  // 	// 		for (auto &branch : lm::system.lm::plant.branches) {
+  // 	// 			draw::wide_line(draw::FrameBuf{(uint32_t*)frame_surf->pixels,
+  // 	// 					frame_surf->w, frame_surf->h}, 
+  // 	// 					Line2{*branch.n1, *branch.n2}, 0xFFFF00FF, lm::system.standard_wd);
+  // 	// 		}
+  // 	//
+  // 	// 		fmt::print("{}/frame{:06}\n", app::context.render_path, i);
+  // 	// 		std::string frame_file = fmt::format("{}/frame{:06}.png", app::context.render_path, i);
+  // 	// 		assert(IMG_SavePNG(frame_surf, frame_file.c_str()));
+  // 	// 		// assert(SDL_SaveBMP(frame_surf, frame_file.c_str()));
+  // 	// 	}
+  // 	// 	SDL_DestroySurface(frame_surf);
+  // 	// }
+  // }
+  //   ImGui::End();
+  // }
+	return State::True;
 }
 
 void render() {

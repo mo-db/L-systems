@@ -2,37 +2,37 @@
 
 // all calculations are done in worldspace
 namespace viewport {
+
 Vec2 screen_to_world(const Vec2 &vertex_screen) {
-	Vec2 vertex_world = vertex_screen + vars.xy_offset;
+	Vec2 vertex_world = vertex_screen + spec.xy_offset;
 	return vertex_world;
 }
+
 Vec2 world_to_screen(const Vec2 &vertex_world) {
-	Vec2 vertex_screen = vertex_world + vars.xy_offset;
+	Vec2 vertex_screen = vertex_world + spec.xy_offset;
 	return vertex_screen;
 }
-bool update_vars() { // ctrl_transform()?
-	// save reference cords
-	if (viewport::vars.panning_active) {
-		if (app::input.ctrl.down()) {
-			// add new offset to old offset
-			viewport::vars.xy_offset = app::input.mouse - viewport::vars.saved_mouse + viewport::vars.xy_offset_old;
-			if (!app::input.mouse_left.down()) {
-				viewport::vars.panning_active = false;
-			}
-		} else {
-			// cancel
-			viewport::vars.xy_offset = viewport::vars.xy_offset_old;
-			viewport::vars.panning_active = false;
-		}
 
-	// activate panning, initialize the vars
-	} else if (app::input.ctrl.down() && app::input.mouse_left.down()) {
-		viewport::vars.saved_mouse = app::input.mouse;
-		viewport::vars.xy_offset_old = viewport::vars.xy_offset;
-		viewport::vars.panning_active = true;
+State update_panning() {
+	// start panning on mouse-click if ctrl is held
+	if (app::input.ctrl.down() && app::input.mouse_left.just_pressed()) {
+		spec.prev_mouse = app::input.mouse;
+		spec.panning_active = true;
 	}
-	return 1;
+
+	if (spec.panning_active) {
+		Vec2 frame_xy_offset = app::input.mouse - spec.prev_mouse;
+		spec.xy_offset = spec.xy_offset + frame_xy_offset;
+		spec.prev_mouse = app::input.mouse;
+
+		// stop panning if either mouse or ctrl is released
+		if (!app::input.ctrl.down() || !app::input.mouse_left.down()) {
+			spec.panning_active = false;
+		}
+	}
+	return State::True;
 }
+
 } // namespace viewport
 
 namespace draw {

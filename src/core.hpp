@@ -51,6 +51,12 @@ inline void print_trace() {
 	Printer p; p.print(st);
 }
 
+enum class State {
+  True,
+  False,
+  Error,
+};
+
 namespace gk {
 constexpr double epsilon = 1e-6;
 constexpr double iepsilon = 0.5;

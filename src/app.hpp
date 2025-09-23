@@ -7,16 +7,19 @@ namespace app {
 
 // to keep track if a state changed this frame
 class StateQueue {
-	bool current_state{false};
-	bool prev_state{false};
+  bool current_state{false};
+  bool prev_state{false};
+
 public:
-	inline bool state() { return current_state; }
-	inline void set(bool state) {
-		prev_state = current_state;
-		current_state = state;
-	}
-	inline bool became_true() { return !prev_state && current_state; }
-	inline bool became_false() { return prev_state && !current_state; }
+  inline void update() { prev_state = current_state; }
+  inline bool state() { return current_state; }
+  inline void state(bool state) { current_state = state; }
+  inline bool became_true() {
+    return (!prev_state && current_state) ? true : false;
+  }
+  inline bool became_false() {
+    return (prev_state && !current_state) ? true : false;
+  }
 };
 
 // useful to keep track if a button was pressed this frame
@@ -69,11 +72,8 @@ struct Gui {
 	static constexpr int textfield_size = 512;
 	ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 	// windows
-	bool show_window_a = false;
-	bool show_window_b = false;
-	bool show_window_c = false;
+	bool show_demo_window = false;
 	bool show_lsystem_window = false;
-	bool show_rendering_window = false;
 };
 
 struct Input {

@@ -120,7 +120,8 @@ struct Rule {
 
 struct LstringSpec {
 	int current_iteration{};
-	int iterations{};
+	int iterations{1};
+	bool generation_started{false};
 	char axiom[app::gui.textfield_size]{};
 	std::vector<Rule> rules;
 	inline void add_rule() { rules.push_back(Rule{}); }
@@ -137,6 +138,7 @@ struct Module {
   Plant plant;
   LstringSpec lstring_spec;
 	std::string lstring{};
+	bool generation_started{false};
   std::vector<Var> default_vars{{"default branch-length", 50.0f},
                                 {"default rotation-angle", gk::pi / 2.0f},
                                 {"default width-change", 1.0f}};
@@ -177,8 +179,8 @@ inline bool remove_module(int id) {
 // std::optional<std::vector<std::string>> scan_saves();
 
 
-std::string expand_lstring(Module module, const std::string &lstring);
-
+State expand_lstring(Module &module);
+State generate_lstring(Module &module);
 
 std::optional<float> _eval_expr(Module module, std::string &expr_string, float *x,
 																 float *y, float *z);

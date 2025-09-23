@@ -22,16 +22,14 @@ void plot_circle(FrameBuf fb, const Circle2 &circle, uint32_t color);
 } // namespace draw
 
 namespace viewport {
-struct Vars {
-	Vec2 xy_offset{}; // this gets polled
-	Vec2 xy_offset_old{};
-	Vec2 saved_mouse{};
+struct Spec {
+	Vec2 xy_offset{};
+	Vec2 prev_mouse{};
 	bool panning_active = false;
 };
+inline Spec spec;
 
-inline Vars vars;
-bool update_vars();
-
+State update_panning();
 Vec2 screen_to_world(const Vec2 &vertex_screen);
 Vec2 world_to_screen(const Vec2 &vertex_world);
 } // namespace viewport
