@@ -7,6 +7,12 @@
 
 namespace lsystem_new {
 static constexpr int textfield_size = 512;
+struct Args {
+	std::string x, y, z;
+	constexpr std::string& operator[](std::size_t i) noexcept {
+			return (i==0 ? x : (i==1 ? y : z));
+	}
+};
 
 // definition of all possible symbols, for all systems
 enum class Symbol : size_t {
@@ -36,10 +42,6 @@ struct Var {
   Var(std::string label_, float value_) : label{label_}, value{value_} {}
 };
 
-
-
-
-
 // ---- Plant ----
 struct Branch {
 	int node1_id{};
@@ -66,6 +68,10 @@ struct Turtle {
 struct Plant {
 	Vec2 start_node{};
 	float start_angle{};
+
+	uint32_t color{0xFF00FFFF};
+	float width{3.f};
+
 	std::vector<Vec2> nodes;
   std::vector<Branch> branches;
 	Plant(Vec2 start_node_, float start_angle_) :
@@ -84,6 +90,7 @@ struct Plant {
 	inline void grow(Vec2 node) {
 		int new_node_id = add_node(node);
 		branches.push_back(Branch{turtle.node_id, new_node_id, turtle.width});
+		turtle.node_id = new_node_id;
 		// could return node_id
 	}
 
@@ -113,14 +120,17 @@ struct Rule {
 
 struct LstringSpec {
 	int current_iteration{};
+	int iterations{};
 	char axiom[app::gui.textfield_size]{};
 	std::vector<Rule> rules;
 	inline void add_rule() { rules.push_back(Rule{}); }
-	inline std::string expand(std::string &lstring) { return lstring; }
 	inline std::string generate(std::string &lstring) { return lstring; }
 };
 
 // ---- object for the whole lsystem data ----
+inline bool plants_need_redraw{true};
+inline bool plants_redrawing{false};
+inline int plants_drawn{0};
 enum class DefaultVar : size_t { move = 0, rotate = 1, width = 2, COUNT = 3 };
 enum class GlobalVar : size_t { h = 0, i = 1, j = 2, k = 3, COUNT = 4 };
 struct Module {
@@ -160,5 +170,45 @@ inline bool remove_module(int id) {
 	lsystem_new::modules.erase(id);
 	return true;
 }
+
+// serializing
+// bool save_rule_as_file(System::Rule &rule, const std::string &save_file_name);
+// bool load_rule_from_file(System::Rule &rule, std::string &save_file_name);
+// std::optional<std::vector<std::string>> scan_saves();
+
+
+std::string expand_lstring(Module module, const std::string &lstring);
+
+
+std::optional<float> _eval_expr(Module module, std::string &expr_string, float *x,
+																 float *y, float *z);
+Vec2 _calculate_move(Plant &plant, const float length);
+void _turn(Turtle &turtle, const float angle);
+void _turtle_action(Module &module, const char c, const float *value);
+Plant generate_plant(const Vec2 start, const std::string lstring);
+bool generate_plant_timed(Module &module);
+bool draw_plants_timed(draw::FrameBuf &fb);
+
+
+// new lstring generation
+bool op_is_valid(const char op);
+bool try_block_match(const char op1, const char op2,
+														const std::string expr1, const std::string expr2);
+// int parse_args(const std::string &args, std::string &x, std::string &y,
+//                      std::string &z);
+int parse_args(const std::string &args_str, Args &args);
+bool parse_block(const std::string &block, char &op, std::string &expr, int *n);
+bool parse_arg(const std::string arg, std::string &base, std::string &pattern,
+							 std::vector<std::string> &repeats, std::string & scale);
+std::string arg_rulearg_substitute(const std::string arg, const std::string rule_arg);
+
+std::string _maybe_apply_rule(Module &module, const char symbol, const std::string args);
+
+// calculate x,y,z args for a symbol, if x = 0.0 -> error, y,z default to 0.0
+std::array<float, 3> symbol_eval_args(Module &module, const char symbol, const std::string &args);
+
+std::optional<float> get_default(Module &module, const char symbol);
+
+void update_vars(Module &module);
 
 } // namespace lsystem_new

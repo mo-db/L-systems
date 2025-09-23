@@ -2,7 +2,7 @@
 #include "app.hpp"
 #include "graphics.hpp"
 #include "rasterize.hpp"
-#include "lsystem.hpp"
+// #include "lsystem.hpp"
 #include "lsystem_new.hpp"
 #include <lo/lo.h>
 
@@ -32,8 +32,8 @@ int main(int argc, char *argv[]) {
 	// this should be per mouse click in the gui
 	// [add new system] -> select start-point
 
-	lm::plant.init(Vec2{(double)app::video.width/2, app::video.height - 50.0}, gk::pi / 2);
-	fmt::print("bytes: {}\n", lm::plant.max_nodes * sizeof(Vec2));
+	// lm::plant.init(Vec2{(double)app::video.width/2, app::video.height - 50.0}, gk::pi / 2);
+	// fmt::print("bytes: {}\n", lm::plant.max_nodes * sizeof(Vec2));
 
 	app::gui.clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 	app::gui.show_window_a = true;
@@ -62,48 +62,72 @@ int main(int argc, char *argv[]) {
 		// fmt::print("offset: {},{}\n", viewport::vars.xy_offset.x, viewport::vars.xy_offset.y);
 		// panning must be changed so it doesnt redraw, it has to use pixels and scale
 		if (viewport::vars.panning_active) {
-			lm::plant.needs_regen = true;
+			for (auto &[key, module] : lsystem_new::modules) {
+				module.plant.needs_regen = true;
+			}
 			puts("pan active");
 		}
 
 		// ---- update the global and default variables -> on gui event? ----
-		lm::update_vars();
+		for (auto &[key, module] : lsystem_new::modules) {
+			lsystem_new::update_vars(module);
+			auto &plant = module.plant;
 
-		// ---- generate plant over one or more frames ----
-		if (lm::plant.needs_regen || lm::plant.regenerating) {
-			if (lm::plant.needs_regen) {
-				print_info("clear plant");
-				lm::plant.needs_regen = false;
-				lm::plant.needs_redraw = true;
-				lm::plant.current_lstring_index = 0;
-				lm::plant.clear();
+			// ---- generate plant over one or more frames ----
+			if (plant.needs_regen || plant.regenerating) {
+				if (plant.needs_regen) {
+					print_info("clear plant");
+					plant.needs_regen = false;
+					plant.needs_redraw = true;
+					plant.current_lstring_index = 0;
+					plant.clear();
+				}
+				bool done = generate_plant_timed(module);
+				if (done) {
+					plant.regenerating = false;
+				} else {
+					done = generate_plant_timed(module);
+					plant.regenerating = true;
+				}
+				lsystem_new::plants_need_redraw = true;
+				// plant.redrawing = true; // plant_check if redraw
 			}
-			bool done = generate_plant_timed(lm::system.lstring, lm::plant, lm::plant.current_lstring_index);
-			if (done) {
-				lm::plant.regenerating = false;
-			} else {
-				done = generate_plant_timed(lm::system.lstring, lm::plant, lm::plant.current_lstring_index);
-				lm::plant.regenerating = true;
-			}
-			lm::plant.redrawing = true; // plant_check if redraw
+
+			// ---- draw plant over one or more frames ----
+			// if (plant.needs_redraw || plant.redrawing) {
+			// 	// how often to clear and the opacity of the plant should be a setting
+			// 	if (plant.needs_redraw) {
+			// 		print_info("clear texture");
+			// 		plant.needs_redraw = false;
+			// 		plant.current_branch = 0;
+			// 		draw::clear(fb_main, color::bg);
+			// 	}
+			// 	bool done = lsystem_new::draw_plants_timed(plant, color::fg, fb_main);
+			// 	if (done) {
+			// 		plant.redrawing = false;
+			// 	} else {
+			// 		plant.redrawing = true;
+			// 	}
+			// }
 		}
 
-		// ---- draw plant over one or more frames ----
-		if (lm::plant.needs_redraw || lm::plant.redrawing) {
-			// how often to clear and the opacity of the plant should be a setting
-			if (lm::plant.needs_redraw) {
-				print_info("clear texture");
-				lm::plant.needs_redraw = false;
-				lm::plant.current_branch = 0;
+		if (lsystem_new::plants_need_redraw || lsystem_new::plants_redrawing) {
+			if (lsystem_new::plants_need_redraw) {
+				lsystem_new::plants_need_redraw = false;
+				lsystem_new::plants_drawn = false;
 				draw::clear(fb_main, color::bg);
+				for (auto &[key, module] : lsystem_new::modules) {
+					module.plant.current_branch = 0;
+				}
 			}
-			bool done = lm::draw_plant_timed(lm::plant, lm::plant.current_branch, color::fg, fb_main);
+			bool done = lsystem_new::draw_plants_timed(fb_main);
 			if (done) {
-				lm::plant.redrawing = false;
+				lsystem_new::plants_redrawing = false;
 			} else {
-				lm::plant.redrawing = true;
+				lsystem_new::plants_redrawing = true;
 			}
 		}
+
 
 		// ---- push framebuffer and render gui ----
 		render();
@@ -206,10 +230,25 @@ bool update_gui() {
     ImGui::ShowDemoWindow(&app::gui.show_window_a);
   }
 
+  // ___LSYSTEM_MAIN___
+  static bool open = true;
+  bool *p_open = &open;
   if (app::gui.show_lsystem_window) {
+
     ImGui::SetNextWindowSize(ImVec2(500, 440), ImGuiCond_FirstUseEver);
     if (ImGui::Begin("L-System", &app::gui.show_lsystem_window,
                      ImGuiWindowFlags_MenuBar)) {
+
+    // ___MENU_BAR___
+      if (ImGui::BeginMenuBar()) {
+        if (ImGui::BeginMenu("File")) {
+          if (ImGui::MenuItem("Close", "Ctrl+W")) {
+            *p_open = false;
+          }
+          ImGui::EndMenu();
+        }
+        ImGui::EndMenuBar();
+      }
 
 			static GuiModuleSpec gui_module_spec{};
 
@@ -266,7 +305,8 @@ bool update_gui() {
 						}
 						ImGui::SameLine();
 						if (ImGui::Button("Expand L-String")) {
-								module.lstring = module.lstring_spec.expand(module.lstring);
+								module.lstring = lsystem_new::expand_lstring(module, module.lstring);
+							module.plant.needs_regen = true;
 						}
 						ImGui::SameLine();
 						if (ImGui::Button("Clear L-String")) {
@@ -328,9 +368,59 @@ bool update_gui() {
 							}
 						}
 
+						// ---- default variables ----
+						for (int i = 0; i < module.default_vars.size(); i++) {
+							lsystem_new::Var &var = module.default_vars[i];
+							if (ImGui::Checkbox(fmt::format("{} use slider?", var.label).c_str(),
+										&var.use_slider)) {}
+							if (var.use_slider) {
+								ImGui::InputFloat(fmt::format("{}_min", var.label).c_str(),
+										&(var.slider_start));
+								ImGui::InputFloat(fmt::format("{}_max", var.label).c_str(),
+										&(var.slider_end));
+								if (ImGui::SliderFloat(fmt::format("{}_slider", var.label).c_str()
+											, &(var.value),
+										var.slider_start, var.slider_end)) {
+									(var.expr)[0] = '\0';
+									module.plant.needs_regen = true;
+								}
+							} else {
+								if (ImGui::InputText(fmt::format("{}_text", var.label).c_str(),
+											var.expr, app::gui.textfield_size)) {
+									module.plant.needs_regen = true;
+								}
+							}
+						}
 
-            ImGui::EndTabItem();
-          }
+						// ---- global variables ----
+						for (int i = 0; i < module.global_vars.size(); i++) {
+							lsystem_new::Var &var = module.global_vars[i];
+							if (ImGui::Checkbox(fmt::format("{} use slider?", var.label).c_str(),
+										&var.use_slider)) {}
+							if (var.use_slider) {
+								// ImGui::SameLine();
+								ImGui::InputFloat(fmt::format("{}_min", var.label).c_str(),
+										&(var.slider_start));
+								ImGui::InputFloat(fmt::format("{}_max", var.label).c_str(),
+										&(var.slider_end));
+								if (ImGui::SliderFloat(fmt::format("{}_slider", var.label).c_str()
+											, &(var.value),
+										var.slider_start, var.slider_end)) {
+									(var.expr)[0] = '\0';
+									module.plant.needs_regen = true;
+								}
+							} else {
+								if (ImGui::InputText(fmt::format("{}_text", var.label).c_str(),
+											var.expr, app::gui.textfield_size)) {
+									module.plant.needs_regen = true;
+								}
+							}
+						}
+
+						ImGui::EndTabItem();
+					}
+
+
 
           if (!open) {
             // active_tabs.erase(active_tabs.begin() + i);
@@ -348,29 +438,15 @@ bool update_gui() {
     ImGui::End();
   }
 
-        if (app::gui.show_rendering_window) {
-    ImGui::SetNextWindowSize(ImVec2(500, 440), ImGuiCond_FirstUseEver);
-    if (ImGui::Begin("Plant", &app::gui.show_rendering_window,
-                     ImGuiWindowFlags_MenuBar)) {
-      if (ImGui::TreeNode("Global Variables")) {
-				for (int i = 0; i < lm::glob_vars.quant; i++) {
-					lm::Var *var = lm::glob_vars.var(i);
-        	ImGui::InputText(var->label.c_str(), var->expr, lm::system.text_size);
-				}
-        ImGui::TreePop();
-      }
-		}
-    ImGui::End();
-	}
 
   // ___LSYSTEM_MAIN___
-  static bool open = true;
-  bool *p_open = &open;
+  static bool open2 = true;
+  bool *p_open2 = &open2;
   if (app::gui.show_window_c) {
 
     // ___MENU_BAR___
     ImGui::SetNextWindowSize(ImVec2(500, 440), ImGuiCond_FirstUseEver);
-    if (ImGui::Begin("Example: Simple layout", p_open,
+    if (ImGui::Begin("Example: Simple layout", p_open2,
                      ImGuiWindowFlags_MenuBar)) {
       if (ImGui::BeginMenuBar()) {
         if (ImGui::BeginMenu("File")) {
@@ -381,142 +457,6 @@ bool update_gui() {
         }
         ImGui::EndMenuBar();
       }
-
-      // __PARAMETERS___
-      if (ImGui::TreeNode("Parameters")) {
-				for (int i = 0; i < lm::system.n_parameters; i++) {
-					std::string label = fmt::format("Parameter {}\n", i);
-        	ImGui::InputText(label.c_str(), lm::system.parameter_strings[i], lm::system.text_size);
-				}
-        ImGui::TreePop();
-      }
-
-			// new part!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-			if (ImGui::Button("Generate L-String")) {
-					bool success = lm::system.generate();
-			}
-			ImGui::SameLine();
-			if (ImGui::Button("Expand L-String")) {
-					bool success = lm::system.expand();
-			}
-			ImGui::SameLine();
-			if (ImGui::Button("Clear L-String")) {
-				lm::system.current_iteration = 0;
-				lm::system.lstring.clear();
-			}
-			ImGui::SameLine();
-			if (ImGui::Button("Regen Plant")) {
-				lm::plant.needs_regen = true;
-			}
-			if (ImGui::Button("Print L-string")) {
-				fmt::print("L-string: {}\n", lm::system.lstring);
-			}
-
-      // ___AXIOM___
-      if (ImGui::TreeNode("Axiom")) {
-        ImGui::InputText("text", lm::system.axiom, app::gui.textfield_size);
-        ImGui::TreePop();
-      }
-
-			// ___RULES___
-      for (int i = 0; i < lm::system.max_rules; i++) {
-        std::string label = fmt::format("Rule {}", i + 1);
-
-        if (ImGui::TreeNode(label.c_str())) {
-
-
-					// ___SYMBOL_SELECTION_COMNO___
-          static ImGuiComboFlags flags = 0;
-          const char *combo_preview_value =
-              lm::system.alphabet[lm::system.rules[i].symbol_index];
-          if (ImGui::BeginCombo("symbol", combo_preview_value, flags)) {
-            for (int n = 0; n < lm::system.alphabet_size; n++) {
-              const bool is_selected = (lm::system.rules[i].symbol_index == n);
-              if (ImGui::Selectable(lm::system.alphabet[n], is_selected))
-                lm::system.rules[i].symbol_index = n;
-
-              // Set the initial focus when opening the combo (scrolling +
-              // keyboard navigation focus)
-              if (is_selected)
-                ImGui::SetItemDefaultFocus();
-            }
-            ImGui::EndCombo();
-          }
-
-					// num args
-					ImGui::RadioButton("1", &lm::system.rules[i].n_args, 1); ImGui::SameLine();
-					ImGui::RadioButton("2", &lm::system.rules[i].n_args, 2); ImGui::SameLine();
-					ImGui::RadioButton("3", &lm::system.rules[i].n_args, 3);
-					// fmt::print("rule{}, args: {}\n", i, lm::system.rules[i].n_args);
-
-
-					// change color based on conditon value
-					bool color_pushed = false;
-					if (lm::system.rules[i].condition_state == util::STATE::ERROR) {
-						ImGui::PushStyleColor(ImGuiCol_Text, (ImVec4)ImColor::HSV(0.0f, 1.0f, 1.0f));
-						color_pushed = true;
-					} else if (lm::system.rules[i].condition_state == util::STATE::TRUE) {
-						color_pushed = true;
-						ImGui::PushStyleColor(ImGuiCol_Text, (ImVec4)ImColor::HSV(0.3f, 1.0f, 1.0f));
-					}
-
-
-					// display condition and text
-					ImGui::InputText("condition", lm::system.rules[i].condition,
-													 lm::system.text_size);
-					if (color_pushed) {
-						ImGui::PopStyleColor();
-					}
-          ImGui::InputText("text", lm::system.rules[i].text, lm::system.text_size);
-
-          ImGui::TreePop();
-        }
-      }
-
-			ImGui::Text("nodes: %d", lm::plant.node_count);
-
-			// ---- standard variables ----
-			ImGui::SliderInt("iterations", &lm::system.iterations, 0, 12);
-			if (ImGui::SliderFloat("length", &lm::system.standard_length, 0.0, 200.0)) {
-				lm::plant.needs_regen = true;
-			}
-			if (ImGui::SliderFloat("angle", &lm::system.standard_angle, 0.0, gk::pi * 2.0)) {
-				lm::plant.needs_regen = true;
-			}
-			if (ImGui::SliderInt("Width", &lm::system.standard_wd, 1, 20)) {
-				lm::plant.needs_regen = true;
-			}
-			// ImGui::SliderInt("seg_count", &lm::system.standard_branch_seg_count, 1, 50);
-
-
-			// testing
-			static std::string test = "test";
-			if (ImGui::CustInputText("testlabel", &test)) {}
-
-			// ---- global variables ----
-			for (int i = 0; i < lm::glob_vars.quant; i++) {
-				lm::Var *var = lm::glob_vars.var(i);
-				if (ImGui::Checkbox(fmt::format("{} use slider?", var->label).c_str(),
-							&var->use_slider)) {}
-				if (var->use_slider) {
-					// ImGui::SameLine();
-					ImGui::InputFloat(fmt::format("{}_min", var->label).c_str(),
-							&(var->slider_start));
-					ImGui::InputFloat(fmt::format("{}_max", var->label).c_str(),
-							&(var->slider_end));
-					if (ImGui::SliderFloat(fmt::format("{}_slider", var->label).c_str()
-								, &(var->value),
-							var->slider_start, var->slider_end)) {
-						(var->expr)[0] = '\0';
-						lm::plant.needs_regen = true;
-					}
-				} else {
-					if (ImGui::InputText(fmt::format("{}_text", var->label).c_str(),
-								var->expr, app::gui.textfield_size)) {
-						lm::plant.needs_regen = true;
-					}
-				}
-			}
 
 			// instead implement serealization for axiom, rules, vars
 			// ---- save files ----

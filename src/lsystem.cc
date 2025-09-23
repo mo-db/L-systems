@@ -1,22 +1,22 @@
-#include "lsystem.hpp"
+#include "lsystem_new.hpp"
 #include "core.hpp"
 
-namespace lm {
-void update_vars() {
-	for (int i = glob_vars.quant - 1; i >= 0; i--) {
-		Var *var = glob_vars.var(i);
-		if (*(var->expr) == '\0') { continue; }
-		if (var->use_slider) {
+namespace lsystem_new {
+void update_vars(Module &module) {
+	for (int i = module.global_vars.size() - 1; i >= 0; i--) {
+		Var &var = module.global_vars[i];
+		if (*(var.expr) == '\0') { continue; }
+		if (var.use_slider) {
 		} else {
-			std::string glob_var_str = var->expr;
-			var->value = _eval_expr(glob_var_str, nullptr, nullptr, nullptr).value_or(0.0);
+			std::string glob_var_str = var.expr;
+			var.value = _eval_expr(module, glob_var_str, nullptr, nullptr, nullptr).value_or(0.0);
 		}
 	}
 }
 
-Vec2 _calculate_move(Turtle &turtle, const float length) {
-	// how to do this without trig?
-	Vec2 position = *turtle.node;
+Vec2 _calculate_move(Plant &plant, const float length) {
+	Turtle &turtle = plant.turtle;
+	Vec2 position = plant.nodes[turtle.node_id];
 	position.x += length * cos(turtle.angle);
 	position.y += length * -sin(turtle.angle);
 	return position;
@@ -25,24 +25,24 @@ void _turn(Turtle &turtle, const float angle) { turtle.angle += angle; }
 
 
 // this could return possible defaults for all 3 vars
-std::optional<float> get_default(const char symbol) {
+std::optional<float> get_default(Module &module, const char symbol) {
 	if (std::isalpha(symbol)) {
-		return lm::system.standard_length;
+		return module.get_default_var(DefaultVar::move).value;
 	}
 	if (symbol == '-' || symbol == '+') {
-		return lm::system.standard_angle;
+		return module.get_default_var(DefaultVar::rotate).value;
 	}
 	// TODO
-	if (symbol == '%') {
-		return 0.0;
+	if (symbol == '%' || symbol == '^') {
+		return module.get_default_var(DefaultVar::width).value;
 	}
 	print_info("lstring contains undefined symbol");
 	return {};
 }
 
 // if args are empty returns default or 0.0
-std::array<float, 3> symbol_eval_args(const char symbol, const std::string &args_str) {
-	auto result = get_default(symbol);
+std::array<float, 3> symbol_eval_args(Module &module, const char symbol, const std::string &args_str) {
+	auto result = get_default(module, symbol);
 	if (result == std::nullopt) { return {}; }
 	float x_default = result.value();
 
@@ -53,7 +53,7 @@ std::array<float, 3> symbol_eval_args(const char symbol, const std::string &args
 	if (args_str.empty()) {
 		return defaults;
 	} else {
- 		n_args = parse_args2(args_str, args);
+ 		n_args = parse_args(args_str, args);
 		if (n_args == 0) { 
 			print_info("parse_args error");
 		}
@@ -104,7 +104,7 @@ std::array<float, 3> symbol_eval_args(const char symbol, const std::string &args
 			value += defaults[i];
 		} else {
 
-			value += _eval_expr(base, x, y, z).value_or(0.0);
+			value += _eval_expr(module, base, x, y, z).value_or(0.0);
 		}
 
 		// at the moment ignore pattern
@@ -120,39 +120,17 @@ std::array<float, 3> symbol_eval_args(const char symbol, const std::string &args
 				}
 
 				if (repeat_op == '+') {
-					value += _eval_expr(repeat_expr, x, y, z).value_or(0.0) * repeat_n;
+					value += _eval_expr(module, repeat_expr, x, y, z).value_or(0.0) * repeat_n;
 				}
 				if (repeat_op == '-') {
-					value -= _eval_expr(repeat_expr, x, y, z).value_or(0.0) * repeat_n;
+					value -= _eval_expr(module, repeat_expr, x, y, z).value_or(0.0) * repeat_n;
 				}
 				if (repeat_op == '*') {
-					value *= std::pow(_eval_expr(repeat_expr, x, y, z).value_or(1.0), repeat_n);
+					value *= std::pow(_eval_expr(module, repeat_expr, x, y, z).value_or(1.0), repeat_n);
 				}
 				if (repeat_op == '/') {
-					value /= std::pow(_eval_expr(repeat_expr, x, y, z).value_or(1.0), repeat_n);
+					value /= std::pow(_eval_expr(module, repeat_expr, x, y, z).value_or(1.0), repeat_n);
 				}
-			}
-		}
-
-		// scale blaock
-		if (!scale.empty()) {
-			char scale_op;
-			std::string scale_expr;
-			if (!parse_block(scale, scale_op, scale_expr, nullptr)) {
-				print_info("repeat parse error");
-			}
-
-			if (scale_op == '+') {
-				value += _eval_expr(scale_expr, x, y, z).value_or(0.0);
-			}
-			if (scale_op == '-') {
-				value -= _eval_expr(scale_expr, x, y, z).value_or(0.0);
-			}
-			if (scale_op == '*') {
-				value *= _eval_expr(scale_expr, x, y, z).value_or(1.0);
-			}
-			if (scale_op == '/') {
-				value /= _eval_expr(scale_expr, x, y, z).value_or(1.0);
 			}
 		}
 	}
@@ -161,13 +139,14 @@ std::array<float, 3> symbol_eval_args(const char symbol, const std::string &args
 }
 
 // this will not only be turtle actions but also thickness, color etc changes
-void _turtle_action(Plant &plant, const char symbol, const std::string args) {
+void _turtle_action(Module &module, const char symbol, const std::string args) {
+	Plant &plant = module.plant;
 	Turtle &turtle = plant.turtle;
 	std::vector<Turtle> &turtle_stack = plant.turtle_stack;
 
 	std::array<float, 3> args_ary{};
 	if (symbol != '[' && symbol != ']') {
-		args_ary = symbol_eval_args(symbol, args);
+		args_ary = symbol_eval_args(module, symbol, args);
 	}
 	// TODO why dont i use y and z here?
 	float x = args_ary[0];
@@ -180,18 +159,7 @@ void _turtle_action(Plant &plant, const char symbol, const std::string args) {
 		if (std::islower(symbol)) {
 			visable = false;
 		}
-
-		// TODO remove this in favour to implementation inside plant -> grow()
-		// check nodes limit -> create branch 
-		if (plant.node_count < plant.max_nodes) {
-			Vec2 *last_node = turtle.node;
-			Vec2 *new_node = plant.add_node(_calculate_move(turtle, x));
-    	plant.branches.push_back(Branch{last_node, new_node, symbol, visable, turtle.width});
-			turtle.node = new_node;
-		} else {
-			std::exit(1);
-			std::puts("node limit reached");
-		}
+		plant.grow(_calculate_move(plant, x));
 	}
 
 	// turn turtle counter-clockwise
@@ -220,7 +188,10 @@ void _turtle_action(Plant &plant, const char symbol, const std::string args) {
 }
 
 // plant start is 0.0 allways?
-bool generate_plant_timed(const std::string &lstring, Plant &plant, int &current_index){
+bool generate_plant_timed(Module &module){
+	std::string &lstring = module.lstring;
+	Plant &plant = module.plant;
+	int &current_index = plant.current_lstring_index;
 
 	int index = current_index;
 	int accum = 0;
@@ -242,12 +213,12 @@ bool generate_plant_timed(const std::string &lstring, Plant &plant, int &current
 
 		// because of that, the check in the while condition is redundant
 		if (index + 1 >= lstring.size()) {
-			_turtle_action(plant, c, "");
+			_turtle_action(module, c, "");
 			current_index = 0;
 			return true;
 		}
 		else if (lstring[index + 1] != '<') {
-			_turtle_action(plant, c, "");
+			_turtle_action(module, c, "");
 			index++;
 		}
 		else {
@@ -259,7 +230,7 @@ bool generate_plant_timed(const std::string &lstring, Plant &plant, int &current
 				current_index = 0;
 				return true;
 			} else {
-				_turtle_action(plant, c, args);
+				_turtle_action(module, c, args);
 				index += args.size() + 1; // move to after '>'
 			}
 		}
@@ -269,31 +240,40 @@ bool generate_plant_timed(const std::string &lstring, Plant &plant, int &current
 	return true;
 }
 
-bool draw_plant_timed(const lm::Plant &plant, int &current_branch,
-											uint32_t color, draw::FrameBuf &fb) {
+bool draw_plants_timed(draw::FrameBuf &fb) {
 	int accum = 0;
-	print_info("here");
-	for (int i = current_branch; i < plant.branches.size(); i++) {
-		print_info(fmt::format("current branch {}\n", i));
-		// ---- timing ----
-		if (++accum >= 10) {
-			accum = 0;
-			util::ms elapsed = util::Clock::now() - app::context.frame_start;
-			// print_info(fmt::format("draw_plant elapsed: {}\n",
-			// 			(elapsed / app::context.frame_time)));
-			if ((elapsed / app::context.frame_time) >= 0.9) {
-				current_branch = i;
-				return false;
-			}
-		}
 
-		auto &branch = plant.branches[i];
-		draw::wide_line(fb, Line2{*branch.n1, *branch.n2}, color, branch.wd);
+	for (int i = lsystem_new::plants_drawn; i < modules.size(); i++) {
+		auto &plant = modules.at(i).plant;
+		auto &current_branch = plant.current_branch;
+
+		for (int i = current_branch; i < plant.branches.size(); i++) {
+			print_info(fmt::format("current branch {}\n", i));
+
+			// ---- timing ----
+			if (++accum >= 10) {
+				accum = 0;
+				util::ms elapsed = util::Clock::now() - app::context.frame_start;
+				// print_info(fmt::format("draw_plant elapsed: {}\n",
+				// 			(elapsed / app::context.frame_time)));
+				if ((elapsed / app::context.frame_time) >= 0.9) {
+					current_branch = i;
+					return false;
+				}
+			}
+
+			auto &branch = plant.branches[i];
+			const Vec2 &node1 = plant.nodes[branch.node1_id];
+			const Vec2 &node2 = plant.nodes[branch.node2_id];
+			draw::wide_line(fb, Line2{node1, node2}, plant.color, branch.wd);
+		}
+		current_branch = 0;
+		lsystem_new::plants_drawn++;
 	}
 	return true;
 }
 
-std::optional<float> _eval_expr(std::string &expr_string, float *x,
+std::optional<float> _eval_expr(Module module, std::string &expr_string, float *x,
 																 float *y, float *z) {
 	typedef float T;
 	typedef exprtk::symbol_table<T> symbol_table_t;
@@ -307,9 +287,9 @@ std::optional<float> _eval_expr(std::string &expr_string, float *x,
 	if (z) { symbol_table.add_variable("z", *z); }
 
 	// add global vars to symbol table
-	for (int i = glob_vars.quant - 1; i >= 0; i--) {
-		Var *var = glob_vars.var(i);
-		symbol_table.add_variable(var->label, var->value);
+	for (int i = module.global_vars.size() - 1; i >= 0; i--) {
+		Var &var = module.global_vars[i];
+		symbol_table.add_variable(var.label, var.value);
 	}
 
 	// parse expression
@@ -324,7 +304,7 @@ std::optional<float> _eval_expr(std::string &expr_string, float *x,
 	return (T)expr.value();
 }
 
-int parse_args2(const std::string &args_str, Args &args) {
+int parse_args(const std::string &args_str, Args &args) {
 	if (args_str.empty()) { return 0; }
   int n_args = 1;
   for (int i = 0; i < args_str.size(); i++) {
@@ -337,27 +317,6 @@ int parse_args2(const std::string &args_str, Args &args) {
 				args.y += args_str[i];
 			} else if (n_args == 3) {
 				args.z += args_str[i];
-			} else {
-				return 0;
-			}
-		}
-  }
-  return n_args;
-}
-
-int parse_args(const std::string &args, std::string &x, std::string &y,
-                     std::string &z) {
-  int n_args = 1;
-  for (int i = 0; i < args.size(); i++) {
-    if (args[i] == ';') {
-      n_args++;
-    } else {
-			if (n_args == 1) {
-				x += args[i];
-			} else if (n_args == 2) {
-				y += args[i];
-			} else if (n_args == 3) {
-				z += args[i];
 			} else {
 				return 0;
 			}
@@ -668,12 +627,12 @@ std::string arg_rulearg_substitute(const std::string arg, const std::string rule
 // 1. rule substituted for symbol if rule applies
 // 2. symbol<args> if no rule applies
 // 3. symbol if error
-std::string _maybe_apply_rule(const char symbol, const std::string args) {
+std::string _maybe_apply_rule(Module &module, const char symbol, const std::string args_str) {
 	std::string default_return = "";
-	if (args.empty()) {
+	if (args_str.empty()) {
 		default_return = fmt::format("{}", symbol);
 	} else {
-		default_return = fmt::format("{}<{}>", symbol, args);
+		default_return = fmt::format("{}<{}>", symbol, args_str);
 	}
 
 	// auto result = get_default(symbol);
@@ -685,9 +644,11 @@ std::string _maybe_apply_rule(const char symbol, const std::string args) {
 	std::string y = "";
 	std::string z = "";
 
+	Args args{};
+
  	int n_args = 1;
-	if (!args.empty()) {
- 		n_args = parse_args(args, x, y, z);
+	if (!args_str.empty()) {
+ 		n_args = parse_args(args_str, args);
 		if (n_args == 0) { 
 			print_info("parse_args error");
 			return fmt::format("{}", symbol); // DONO
@@ -697,7 +658,7 @@ std::string _maybe_apply_rule(const char symbol, const std::string args) {
 	// fmt::print("args: {}\n", args);
 
 	// ---- try to match a rule ----
-	for (auto &rule : system.rules) {
+	for (auto &rule : module.lstring_spec.rules) {
 		// Matching phase:
 		// 2. test if there is a matching symbol
 		// -> 3. then test if the number of args matches
@@ -707,20 +668,19 @@ std::string _maybe_apply_rule(const char symbol, const std::string args) {
 		// check symbol, check args present, check args condition
 		// -> implement later... check context, check environmental conditions
 		// why isnt this just a char array?
-		char rule_symbol = (system.alphabet[rule.symbol_index])[0];
-		std::string condition = rule.condition;
-		std::string text = rule.text;
+		std::string condition = rule.textfield_condition;
+		std::string text = rule.textfield_rule;
 
 
 		// print_info("check_1");
 
-		if (rule_symbol != symbol) { continue; }
+		if (rule.symbol != symbol) { continue; }
 		// if (rule.n_args != n_args) { continue; }
 
 		// TODO: check against condition
 		if (!condition.empty()) {
-			std::array<float, 3> args_ary = symbol_eval_args(symbol, args);
-			auto result = _eval_expr(condition, &args_ary[0], &args_ary[1],
+			std::array<float, 3> args_ary = symbol_eval_args(module, symbol, args_str);
+			auto result = _eval_expr(module, condition, &args_ary[0], &args_ary[1],
 					&args_ary[2]);
 			if (!result) {
 				// TODO: HALT_GENERATION
@@ -768,26 +728,19 @@ std::string _maybe_apply_rule(const char symbol, const std::string args) {
 				index += rule_symbol_args.size() + 1; // move index after '>'
 
 				// the args of the symbol occurence in rule
-				std::string rule_x = "";
-				std::string rule_y = "";
-				std::string rule_z = "";
-				parse_args(rule_symbol_args, rule_x, rule_y, rule_z);
-
-				// replace or extend the symbol args with the rule_symbol args
-				std::string fin_x = "";
-				std::string fin_y = ""; 
-				std::string fin_z = "";
+				Args rule_args{};
+				parse_args(rule_symbol_args, rule_args);
 
 				// what to do if impty?
-				fin_x = arg_rulearg_substitute(x, rule_x); // arg can be empty
+				std::string fin_x = arg_rulearg_substitute(x, rule_args.x); // arg can be empty
 				return_str += '<';
 				return_str += fin_x;
 				if (n_args > 1) {
-					fin_y = arg_rulearg_substitute(y, rule_y);
+					std::string fin_y = arg_rulearg_substitute(y, rule_args.y);
 					return_str += fmt::format(";{}", fin_y);
 				}
 				if (n_args > 2) {
-					fin_z = arg_rulearg_substitute(z, rule_z);
+					std::string fin_z = arg_rulearg_substitute(z, rule_args.z);
 					return_str += fmt::format(";{}", fin_z);
 				}
 				return_str += '>';
@@ -799,13 +752,14 @@ std::string _maybe_apply_rule(const char symbol, const std::string args) {
 	return default_return; 
 }
 
-bool System::expand() {
+std::string expand_lstring(Module module, const std::string &lstring) {
+	auto &current_iteration = module.lstring_spec.current_iteration;
 	// exit early on first iteration
 	if (current_iteration == 0) {
 		current_iteration++;
-		lstring = axiom;
-		return true;
+		return module.lstring_spec.axiom;
 	}
+
 	// expand lstring and save into lstring_expanded
   std::string lstring_expanded = "";
 	int index = 0;
@@ -816,107 +770,107 @@ bool System::expand() {
 			lstring_expanded += lstring[index++];
 		} else {
 			if (index + 1 >= lstring.size()) { // this makes while condition irrelevant
-				lstring_expanded += _maybe_apply_rule(lstring[index], "");
+				lstring_expanded += _maybe_apply_rule(module, lstring[index], "");
 				break;
 			} else if (lstring[index + 1] != '<') {
-				lstring_expanded += _maybe_apply_rule(lstring[index++], "");
+				lstring_expanded += _maybe_apply_rule(module, lstring[index++], "");
 			} else {
 				index += 2; // move to after '<'
 				std::string args = util::get_substr(lstring, index, '>');
 				if (args.empty()) {
 					print_info("lstring invalid, expand failed");
-					return false;
+					return "";
 				}
-				lstring_expanded += _maybe_apply_rule(c, args);
+				lstring_expanded += _maybe_apply_rule(module, c, args);
 				index += args.size() + 1; // move to after '>'
 			}
 		}
 	}
 	// replace lstring with lstring_expanded and return
-	lstring = lstring_expanded;
 	current_iteration++;
-	return true;
+	return lstring_expanded;
 }
 
 
 // TODO serialize lsystem
-bool save_rule_as_file(System::Rule &rule, const std::string &save_file_name) {
-	std::string save_file_full_path = app::context.save_path + '/' + save_file_name;
-
-	fmt::print("save file: {}\n", save_file_full_path);
-
-	FILE* fp = std::fopen(save_file_full_path.c_str(), "w");
-	if (!fp) {
-		std::puts("std::fopen failed");
-		return false;
-	}
-
-	bool is_ok = true;
-	constexpr int n_items = app::gui.textfield_size;
-  if (fwrite(rule.condition, sizeof(rule.condition[0]), n_items, fp) != n_items) {
-		is_ok = false;
-	}
-	if (fwrite(rule.text, sizeof(rule.text[0]), n_items, fp) != n_items) {
-		is_ok = false;
-	}
-
-	fclose(fp);
-
-	// delete file if frwite() failed
-	if (!is_ok) {
-		assert(std::remove(save_file_full_path.c_str()) == 0);
-	}
-	return true;
-}
+// bool save_rule_as_file(System::Rule &rule, const std::string &save_file_name) {
+// 	std::string save_file_full_path = app::context.save_path + '/' + save_file_name;
+//
+// 	fmt::print("save file: {}\n", save_file_full_path);
+//
+// 	FILE* fp = std::fopen(save_file_full_path.c_str(), "w");
+// 	if (!fp) {
+// 		std::puts("std::fopen failed");
+// 		return false;
+// 	}
+//
+// 	bool is_ok = true;
+// 	constexpr int n_items = app::gui.textfield_size;
+//   if (fwrite(rule.condition, sizeof(rule.condition[0]), n_items, fp) != n_items) {
+// 		is_ok = false;
+// 	}
+// 	if (fwrite(rule.text, sizeof(rule.text[0]), n_items, fp) != n_items) {
+// 		is_ok = false;
+// 	}
+//
+// 	fclose(fp);
+//
+// 	// delete file if frwite() failed
+// 	if (!is_ok) {
+// 		assert(std::remove(save_file_full_path.c_str()) == 0);
+// 	}
+// 	return true;
+// }
 
 
 // TODO load lsystem from file
-bool load_rule_from_file(System::Rule &rule, std::string &save_file_name) {
-	std::string save_file = app::context.save_path + '/' + save_file_name;
+// bool load_rule_from_file(System::Rule &rule, std::string &save_file_name) {
+// 	std::string save_file = app::context.save_path + '/' + save_file_name;
+//
+// 	FILE* fp = std::fopen(save_file.c_str(), "r");
+// 	if (!fp) {
+// 		std::puts("std::fopen failed");
+// 		return false;
+// 	}
+//
+// 	constexpr int n_items = app::gui.textfield_size;
+// 	char temp_buf[n_items];
+//   if (std::fread(temp_buf, sizeof(temp_buf[0]), n_items, fp) == n_items) {
+// 		std::memcpy(rule.condition, temp_buf, n_items * sizeof(temp_buf[0]));
+// 	} else {
+// 		std::fclose(fp);
+// 		return false;
+// 	}
+//   if (std::fread(temp_buf, sizeof(temp_buf[0]), n_items, fp) == n_items) {
+// 		std::memcpy(rule.text, temp_buf, n_items * sizeof(temp_buf[0]));
+// 	} else {
+// 		std::fclose(fp);
+// 		return false;
+// }
+//
+// 	std::fclose(fp);
+// 	return true;
+// }
 
-	FILE* fp = std::fopen(save_file.c_str(), "r");
-	if (!fp) {
-		std::puts("std::fopen failed");
-		return false;
-	}
 
-	constexpr int n_items = app::gui.textfield_size;
-	char temp_buf[n_items];
-  if (std::fread(temp_buf, sizeof(temp_buf[0]), n_items, fp) == n_items) {
-		std::memcpy(rule.condition, temp_buf, n_items * sizeof(temp_buf[0]));
-	} else {
-		std::fclose(fp);
-		return false;
-	}
-  if (std::fread(temp_buf, sizeof(temp_buf[0]), n_items, fp) == n_items) {
-		std::memcpy(rule.text, temp_buf, n_items * sizeof(temp_buf[0]));
-	} else {
-		std::fclose(fp);
-		return false;
-}
-
-	std::fclose(fp);
-	return true;
-}
-
-
-std::optional<std::vector<std::string>> scan_saves() {
-	namespace fs = std::filesystem;
-	std::string save_path = app::context.save_path;
-
-	std::vector<std::string> names;
-	if (fs::exists(save_path) && fs::is_directory(save_path)) {
-			for (auto const& entry : fs::directory_iterator(save_path)) {
-					if (entry.is_regular_file()) {
-							names.push_back(entry.path().filename().string());
-					}
-			}
-	}
-	std::sort(names.begin(), names.end());
-	if (names.size() > 0) {
-		return names;
-	} else {
-		return {};
-	}
-}
+// scan the save files
+// std::optional<std::vector<std::string>> scan_saves() {
+// 	namespace fs = std::filesystem;
+// 	std::string save_path = app::context.save_path;
+//
+// 	std::vector<std::string> names;
+// 	if (fs::exists(save_path) && fs::is_directory(save_path)) {
+// 			for (auto const& entry : fs::directory_iterator(save_path)) {
+// 					if (entry.is_regular_file()) {
+// 							names.push_back(entry.path().filename().string());
+// 					}
+// 			}
+// 	}
+// 	std::sort(names.begin(), names.end());
+// 	if (names.size() > 0) {
+// 		return names;
+// 	} else {
+// 		return {};
+// 	}
+// }
 } // namespace ls

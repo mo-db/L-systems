@@ -207,8 +207,4 @@ std::array<float, 3> symbol_eval_args(const char symbol, const std::string &args
 std::optional<float> get_default(const char symbol);
 
 void update_vars();
-
-// into util
-std::string get_substr(const std::string &str, const int index, const char c);
-std::string trim(const std::string &s);
 } // namespace lsystem
