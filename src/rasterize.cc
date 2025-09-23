@@ -13,10 +13,10 @@ Vec2 world_to_screen(const Vec2 &vertex_world) {
 bool update_vars() { // ctrl_transform()?
 	// save reference cords
 	if (viewport::vars.panning_active) {
-		if (app::input.ctrl_set) {
+		if (app::input.ctrl.down()) {
 			// add new offset to old offset
 			viewport::vars.xy_offset = app::input.mouse - viewport::vars.saved_mouse + viewport::vars.xy_offset_old;
-			if (!app::input.mouse_left_down) {
+			if (!app::input.mouse_left.down()) {
 				viewport::vars.panning_active = false;
 			}
 		} else {
@@ -26,7 +26,7 @@ bool update_vars() { // ctrl_transform()?
 		}
 
 	// activate panning, initialize the vars
-	} else if (app::input.ctrl_set && app::input.mouse_left_down) {
+	} else if (app::input.ctrl.down() && app::input.mouse_left.down()) {
 		viewport::vars.saved_mouse = app::input.mouse;
 		viewport::vars.xy_offset_old = viewport::vars.xy_offset;
 		viewport::vars.panning_active = true;

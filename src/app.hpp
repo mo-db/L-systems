@@ -4,6 +4,38 @@
 #include "graphics.hpp"
 
 namespace app {
+
+// to keep track if a state changed this frame
+class StateQueue {
+	bool current_state{false};
+	bool prev_state{false};
+public:
+	inline bool state() { return current_state; }
+	inline void set(bool state) {
+		prev_state = current_state;
+		current_state = state;
+	}
+	inline bool became_true() { return !prev_state && current_state; }
+	inline bool became_false() { return prev_state && !current_state; }
+};
+
+// useful to keep track if a button was pressed this frame
+class InputStateQueue {
+  bool current_state{false};
+  bool prev_state{false};
+
+public:
+  inline void update() { prev_state = current_state; }
+  inline bool down() { return current_state; }
+  inline void down(bool state) { current_state = state; }
+  inline bool just_pressed() {
+    return (!prev_state && current_state) ? true : false;
+  }
+  inline bool just_released() {
+    return (prev_state && !current_state) ? true : false;
+  }
+};
+
 struct Context {
   util::ms frame_time = util::ms(1000.0 / 60.0);
 	util::TimePoint frame_start;
@@ -45,12 +77,12 @@ struct Gui {
 };
 
 struct Input {
+	InputStateQueue mouse_left{};
+	InputStateQueue mouse_middle{};
+	InputStateQueue mouse_right{};
+	InputStateQueue shift{};
+	InputStateQueue ctrl{};
 	Vec2 mouse{};
-	bool mouse_left_down = false;
-	bool mouse_right_down = false;
-	bool mouse_click = false;
-	bool shift_set = false;
-	bool ctrl_set = false;
 };
 
 inline Context context;
@@ -59,4 +91,5 @@ inline Gui gui;
 inline Input input;
 
 void init(int width, int height);
+void update_state_queues();
 } // namespace app

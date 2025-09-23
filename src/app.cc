@@ -56,4 +56,14 @@ void init(int width, int height) {
 	ImGui_ImplSDL3_InitForSDLRenderer(app::video.window, app::video.renderer);
 	ImGui_ImplSDLRenderer3_Init(app::video.renderer);
 }
+
+void update_state_queues() {
+	// input states
+	input.mouse_left.update();
+	input.mouse_middle.update();
+	input.mouse_right.update();
+	input.shift.update();
+	input.ctrl.update();
+}
+
 } // namespace app

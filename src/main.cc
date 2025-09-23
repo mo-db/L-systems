@@ -31,11 +31,6 @@ int main(int argc, char *argv[]) {
 
 	// this should be per mouse click in the gui
 	// [add new system] -> select start-point
-	fmt::print("complexes size: {}\n", lsystem_new::complexes.size());
-	lsystem_new::complexes.push_back(
-			lsystem_new::Complex{lsystem_new::Plant{Vec2{(double)app::video.width/2,
-			app::video.height - 50.0}, gk::pi / 2}, lsystem_new::LstringSpec{}});
-	fmt::print("complexes size: {}\n", lsystem_new::complexes.size());
 
 	lm::plant.init(Vec2{(double)app::video.width/2, app::video.height - 50.0}, gk::pi / 2);
 	fmt::print("bytes: {}\n", lm::plant.max_nodes * sizeof(Vec2));
@@ -51,6 +46,7 @@ int main(int argc, char *argv[]) {
 
 	while(app::context.keep_running) {
 		app::context.frame_start = util::Clock::now();
+		app::update_state_queues();
 		process_events();
 		if (!update_gui()) {
 			return 1;
@@ -116,7 +112,8 @@ int main(int argc, char *argv[]) {
 	return 0;
 }
 
-// could return vector of key presses, maybe pairs of key and state
+
+
 void process_events() {
   SDL_Event event;
   while (SDL_PollEvent(&event)) {
@@ -132,19 +129,13 @@ void process_events() {
       app::context.keep_running = false;
       break;
 
-		case SDL_EVENT_WINDOW_CLOSE_REQUESTED:
-
 		case SDL_EVENT_KEY_UP:
 			switch(event.key.key) {
 				case SDLK_LSHIFT:
-					if (!event.key.repeat) {
-						app::input.shift_set = false;
-					}
+					app::input.shift.down(false);
 					break;
 				case SDLK_LCTRL:
-					if (!event.key.repeat) {
-						app::input.ctrl_set = false;
-					}
+					app::input.ctrl.down(false);
 					break;
 				default: break;
 			}
@@ -153,14 +144,10 @@ void process_events() {
 		case SDL_EVENT_KEY_DOWN:
 			switch(event.key.key) {
 				case SDLK_LSHIFT:
-					if (!event.key.repeat) {
-						app::input.shift_set = true;
-					}
+					app::input.shift.down(true);
 					break;
 				case SDLK_LCTRL:
-					if (!event.key.repeat) {
-						app::input.ctrl_set = true;
-					}
+					app::input.ctrl.down(true);
 					break;
         case SDLK_ESCAPE:
 					break;
@@ -176,18 +163,35 @@ void process_events() {
       break;
 
     case SDL_EVENT_MOUSE_BUTTON_DOWN:
-      app::input.mouse_left_down = event.button.down;
-			app::input.mouse_click = true;
+			if (event.button.button == 1) { app::input.mouse_left.down(true); }
+			if (event.button.button == 2) { app::input.mouse_middle.down(true); }
+			if (event.button.button == 3) { app::input.mouse_right.down(true); }
       break;
 
-    case SDL_EVENT_MOUSE_BUTTON_UP:
-      app::input.mouse_left_down = event.button.down;
-      break;
+		case SDL_EVENT_MOUSE_BUTTON_UP:
+			if (event.button.button == 1) { app::input.mouse_left.down(false); }
+			if (event.button.button == 2) { app::input.mouse_middle.down(false); }
+			if (event.button.button == 3) { app::input.mouse_right.down(false); }
+			break;
 
 		default: break;
 		}
 	}
 }
+
+// Modules are bound to and can be created from ModuleTabs
+struct ModuleTab {
+	int tab_id{};
+	int module_id{};
+	ModuleTab(int tab_id_, int module_id_) : tab_id{tab_id_}, module_id{module_id_} {}
+};
+
+struct GuiModuleSpec {
+	std::vector<ModuleTab> tabs{};
+	int next_tab_id{};
+	bool wait_for_coordinates{false};
+};
+
 bool update_gui() {
   ImGui_ImplSDLRenderer3_NewFrame();
   ImGui_ImplSDL3_NewFrame();
@@ -202,12 +206,24 @@ bool update_gui() {
     ImGui::SetNextWindowSize(ImVec2(500, 440), ImGuiCond_FirstUseEver);
     if (ImGui::Begin("L-System", &app::gui.show_lsystem_window,
                      ImGuiWindowFlags_MenuBar)) {
-      static std::vector<int> active_tabs;
-      static int next_tab_id = 0;
-      // Initialize with default tab
-      if (next_tab_id == 0) {
-        active_tabs.push_back(next_tab_id++);
-      }
+
+			static GuiModuleSpec gui_module_spec{};
+
+			if (gui_module_spec.wait_for_coordinates) {
+				if (app::input.mouse_left.just_pressed()) {
+					gui_module_spec.wait_for_coordinates = false;
+					Vec2 start_point = app::input.mouse;
+					int current_module_id = lsystem_new::add_module(lsystem_new::Module{
+							lsystem_new::Plant{start_point,  gk::pi / 2}, lsystem_new::LstringSpec{}});
+					gui_module_spec.tabs.push_back( ModuleTab{gui_module_spec.next_tab_id++, current_module_id} );
+					fmt::print("complexes size: {}\n", lsystem_new::modules.size());
+				} else {
+				}
+			}
+
+			if (ImGui::Button("Create Module")) {
+				gui_module_spec.wait_for_coordinates = true;
+			}
 
       static ImGuiTabBarFlags tab_bar_flags =
           ImGuiTabBarFlags_AutoSelectNewTabs | ImGuiTabBarFlags_Reorderable |
@@ -232,17 +248,19 @@ bool update_gui() {
         }
 
 				// Trailing TabItemButton() to add tabs
-        if (show_trailing_button) {
-          if (ImGui::TabItemButton("+", ImGuiTabItemFlags_Trailing |
-                                            ImGuiTabItemFlags_NoTooltip)) {
-            active_tabs.push_back(next_tab_id++);
-          }
-        }
+					//    if (show_trailing_button) {
+					//      if (ImGui::TabItemButton("+", ImGuiTabItemFlags_Trailing |
+					//                                        ImGuiTabItemFlags_NoTooltip)) {
+					// int current_module_id = lsystem_new::add_module(lsystem_new::Module{
+					// 		lsystem_new::Plant{start_point,  gk::pi / 2}, lsystem_new::LstringSpec{}});
+					// 	gui_module_spec.tabs.push_back( ModuleTab{gui_module_spec.next_tab_id++, current_module_id} );
+					//      }
+					//    }
 
         // Submit our regular tabs
-        for (int i = 0; i < active_tabs.size();) {
+        for (int i = 0; i < gui_module_spec.tabs.size();) {
           bool open = true;
-          std::string name = fmt::format("{}", active_tabs[i]);
+          std::string name = fmt::format("{}", gui_module_spec.tabs[i].tab_id);
           if (ImGui::BeginTabItem(name.c_str(), &open,
                                   ImGuiTabItemFlags_None)) {
             // implement complex here: update_complex();
@@ -251,7 +269,11 @@ bool update_gui() {
           }
 
           if (!open) {
-            active_tabs.erase(active_tabs.begin() + i);
+            // active_tabs.erase(active_tabs.begin() + i);
+						if (!lsystem_new::remove_module((gui_module_spec.tabs.begin() + i)->module_id)) {
+							assert(false && "remove_module fail");
+						}
+						gui_module_spec.tabs.erase(gui_module_spec.tabs.begin() + i);
           } else {
             i++;
           }

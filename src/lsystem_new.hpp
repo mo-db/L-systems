@@ -122,7 +122,7 @@ struct LstringSpec {
 // ---- object for the whole lsystem data ----
 enum class DefaultVar : size_t { move = 0, rotate = 1, width = 2, COUNT = 3 };
 enum class GlobalVar : size_t { h = 0, i = 1, j = 2, k = 3, COUNT = 4 };
-struct Complex {
+struct Module {
   Plant plant;
   LstringSpec lstring_spec;
   std::vector<Var> default_vars{{"default branch-length", 50.0f},
@@ -130,7 +130,7 @@ struct Complex {
                                 {"default width-change", 1.0f}};
   std::vector<Var> global_vars{{"h"}, {"i"}, {"j"}, {"k"}};
 
-	Complex(Plant plant_, LstringSpec lstring_spec_) : 
+	Module(Plant plant_, LstringSpec lstring_spec_) : 
 		plant{plant_}, lstring_spec{lstring_spec_} {}
 
   inline Var &get_default_var(DefaultVar default_var) {
@@ -140,6 +140,23 @@ struct Complex {
     return global_vars[static_cast<std::size_t>(global_var)];
   }
 };
-inline std::vector<Complex> complexes;
+// inline std::vector<Module> modules;
+inline std::unordered_map<int, Module> modules;
+inline int module_counter{};
+
+// add module and return id of this module
+inline int add_module(Module module) {
+  modules.emplace(module_counter++, std::move(module)); // no default ctor required
+	return module_counter - 1;
+}
+
+// remove module by id, true if successfull
+inline bool remove_module(int id) {
+	if (lsystem_new::modules.find(id) == lsystem_new::modules.end()) {
+		return false;
+	}
+	lsystem_new::modules.erase(id);
+	return true;
+}
 
 } // namespace lsystem_new
