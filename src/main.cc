@@ -192,6 +192,10 @@ struct GuiModuleSpec {
 	bool wait_for_coordinates{false};
 };
 
+bool gui_update_module() {
+	return true;
+}
+
 bool update_gui() {
   ImGui_ImplSDLRenderer3_NewFrame();
   ImGui_ImplSDL3_NewFrame();
@@ -247,24 +251,84 @@ bool update_gui() {
           ImGui::EndPopup();
         }
 
-				// Trailing TabItemButton() to add tabs
-					//    if (show_trailing_button) {
-					//      if (ImGui::TabItemButton("+", ImGuiTabItemFlags_Trailing |
-					//                                        ImGuiTabItemFlags_NoTooltip)) {
-					// int current_module_id = lsystem_new::add_module(lsystem_new::Module{
-					// 		lsystem_new::Plant{start_point,  gk::pi / 2}, lsystem_new::LstringSpec{}});
-					// 	gui_module_spec.tabs.push_back( ModuleTab{gui_module_spec.next_tab_id++, current_module_id} );
-					//      }
-					//    }
-
         // Submit our regular tabs
         for (int i = 0; i < gui_module_spec.tabs.size();) {
           bool open = true;
-          std::string name = fmt::format("{}", gui_module_spec.tabs[i].tab_id);
+					ModuleTab &tab = gui_module_spec.tabs[i];
+          std::string name = fmt::format("{}", tab.tab_id);
           if (ImGui::BeginTabItem(name.c_str(), &open,
                                   ImGuiTabItemFlags_None)) {
-            // implement complex here: update_complex();
-            ImGui::Text("This is the %s tab!", name.c_str());
+
+
+						lsystem_new::Module &module = lsystem_new::modules.at(tab.module_id);
+						if (ImGui::Button("Generate L-String")) {
+								module.lstring = module.lstring_spec.generate(module.lstring);
+						}
+						ImGui::SameLine();
+						if (ImGui::Button("Expand L-String")) {
+								module.lstring = module.lstring_spec.expand(module.lstring);
+						}
+						ImGui::SameLine();
+						if (ImGui::Button("Clear L-String")) {
+							module.lstring_spec.current_iteration = 0;
+							module.lstring.clear();
+						}
+						ImGui::SameLine();
+						if (ImGui::Button("Regen Plant")) {
+							module.plant.needs_regen = true;
+						}
+						if (ImGui::Button("Print L-string")) {
+							fmt::print("L-string: {}\n", module.lstring);
+						}
+
+						// ___AXIOM___
+						if (ImGui::TreeNode("Axiom")) {
+							ImGui::InputText("text", module.lstring_spec.axiom, app::gui.textfield_size);
+							ImGui::TreePop();
+						}
+
+						if (ImGui::Button("Add Rule")) {
+							module.lstring_spec.add_rule();
+						}
+
+						// ___RULES___
+						for (int i = 0; i < module.lstring_spec.rules.size(); i++) {
+							std::string label = fmt::format("Rule {}", i + 1);
+							auto &rule = module.lstring_spec.rules[i];
+
+							// select the symbol the rule works on
+							if (ImGui::TreeNode(label.c_str())) {
+								// ___SYMBOL_SELECTION_COMNO___
+								static ImGuiComboFlags flags = 0;
+								std::string symbol_str = fmt::format("{}", rule.symbol);
+								const char *combo_preview_value = symbol_str.c_str();
+									// &rule.symbol;
+								if (ImGui::BeginCombo("symbol", combo_preview_value, flags)) {
+									for (int n = 0; n < lsystem_new::symbols.size(); n++) {
+										char symbol = lsystem_new::symbols[n];
+										const bool is_selected = (symbol == rule.symbol);
+
+										symbol_str = fmt::format("{}", symbol);
+										if (ImGui::Selectable(symbol_str.c_str(), is_selected))
+											rule.symbol = symbol;
+
+										// Set the initial focus when opening the combo (scrolling +
+										// keyboard navigation focus)
+										if (is_selected)
+											ImGui::SetItemDefaultFocus();
+									}
+									ImGui::EndCombo();
+								}
+
+								ImGui::InputText("condition", rule.textfield_condition,
+																 app::gui.textfield_size);
+								ImGui::InputText("rule", rule.textfield_rule, 
+																 app::gui.textfield_size);
+								ImGui::TreePop();
+							}
+						}
+
+
             ImGui::EndTabItem();
           }
 
@@ -341,13 +405,11 @@ bool update_gui() {
 				lm::system.lstring.clear();
 			}
 			ImGui::SameLine();
-			if (ImGui::Button("Print L-string")) {
-				fmt::print("L-string: {}\n", lm::system.lstring);
-			}
-
-
 			if (ImGui::Button("Regen Plant")) {
 				lm::plant.needs_regen = true;
+			}
+			if (ImGui::Button("Print L-string")) {
+				fmt::print("L-string: {}\n", lm::system.lstring);
 			}
 
       // ___AXIOM___

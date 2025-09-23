@@ -105,7 +105,7 @@ struct Plant {
 
 // ---- lstring generation ----
 struct Rule {
-	std::string symbol;
+	char symbol{0};
 	char textfield_condition[textfield_size]{};
 	char textfield_rule[textfield_size]{};
 	util::STATE condition_state = util::STATE::FALSE; // TODO
@@ -116,7 +116,8 @@ struct LstringSpec {
 	char axiom[app::gui.textfield_size]{};
 	std::vector<Rule> rules;
 	inline void add_rule() { rules.push_back(Rule{}); }
-	std::string expand(std::string &lstring);
+	inline std::string expand(std::string &lstring) { return lstring; }
+	inline std::string generate(std::string &lstring) { return lstring; }
 };
 
 // ---- object for the whole lsystem data ----
@@ -125,6 +126,7 @@ enum class GlobalVar : size_t { h = 0, i = 1, j = 2, k = 3, COUNT = 4 };
 struct Module {
   Plant plant;
   LstringSpec lstring_spec;
+	std::string lstring{};
   std::vector<Var> default_vars{{"default branch-length", 50.0f},
                                 {"default rotation-angle", gk::pi / 2.0f},
                                 {"default width-change", 1.0f}};
