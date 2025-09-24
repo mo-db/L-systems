@@ -9,27 +9,17 @@
 
 void process_events();
 void lock_frame_buf();
-State update_gui();
+State update_gui(lsystem_new::LsystemManager& lsystem_manager);
 void render();
 void cleanup();
-
-int send(void) {
-    lo_address addr = lo_address_new("127.0.0.1", "7400");
-    float thickness = 0.123f;
-    int rc = lo_send(addr, "/fractal/thickness", "f", thickness);
-    if (rc == -1) {
-        fprintf(stderr, "send failed\n");
-        return 1;
-    }
-    lo_address_free(addr);
-    return 0;
-}
 
 // store lines in main? vector<line>
 int main(int argc, char *argv[]) {
 	app::init(960, 540);
 	draw::FrameBuf fb_main{app::video.window_texture_pixels,
 												 app::video.width, app::video.height};
+
+	lsystem_new::LsystemManager lsystem_manager{};
 
 	app::gui.show_lsystem_window = true;
 	app::gui.show_demo_window = true;
@@ -40,14 +30,10 @@ int main(int argc, char *argv[]) {
 		process_events();
 
 		{
-			State s = update_gui();
+			State s = update_gui(lsystem_manager);
 			if (s == State::Error) { return 1;}
 		}
 
-		// where to put this?
-		// -> if strg-down on mouse down save mouse coords as old offset cords
-		// -> every frame calculate offset with old mouse coords to new mouse
-		// position
 		{ 
 			State s = viewport::update_panning();
 			if (s == State::Error) { return 1; }
@@ -58,16 +44,16 @@ int main(int argc, char *argv[]) {
 
 		// panning must be changed so it doesnt redraw, it has to use pixels and scale
 		if (viewport::spec.panning_active) {
-			for (auto &[key, module] : lsystem_new::modules) {
-				module.plant.needs_regen = true;
+			for (auto &[key, module] : lsystem_manager.modules) {
+				module->plant.needs_regen = true;
 			}
 			// puts("pan active");
 		}
 
 		// ---- update the global and default variables -> on gui event? ----
-		for (auto &[key, module] : lsystem_new::modules) {
-			lsystem_new::update_vars(module);
-			auto &plant = module.plant;
+		for (auto &[key, module] : lsystem_manager.modules) {
+			module->update_vars();
+			auto &plant = module->plant;
 
 			// ---- generate plant over one or more frames ----
 			if (plant.needs_regen || plant.regenerating) {
@@ -78,33 +64,15 @@ int main(int argc, char *argv[]) {
 					plant.current_lstring_index = 0;
 					plant.clear();
 				}
-				bool done = generate_plant_timed(module);
+				bool done = generate_plant_timed(*module);
 				if (done) {
 					plant.regenerating = false;
 				} else {
-					done = generate_plant_timed(module);
+					done = generate_plant_timed(*module);
 					plant.regenerating = true;
 				}
 				lsystem_new::plants_need_redraw = true;
-				// plant.redrawing = true; // plant_check if redraw
 			}
-
-			// ---- draw plant over one or more frames ----
-			// if (plant.needs_redraw || plant.redrawing) {
-			// 	// how often to clear and the opacity of the plant should be a setting
-			// 	if (plant.needs_redraw) {
-			// 		print_info("clear texture");
-			// 		plant.needs_redraw = false;
-			// 		plant.current_branch = 0;
-			// 		draw::clear(fb_main, color::bg);
-			// 	}
-			// 	bool done = lsystem_new::draw_plants_timed(plant, color::fg, fb_main);
-			// 	if (done) {
-			// 		plant.redrawing = false;
-			// 	} else {
-			// 		plant.redrawing = true;
-			// 	}
-			// }
 		}
 
 		if (lsystem_new::plants_need_redraw || lsystem_new::plants_redrawing) {
@@ -112,14 +80,15 @@ int main(int argc, char *argv[]) {
 				lsystem_new::plants_need_redraw = false;
 				lsystem_new::plants_drawn = false;
 				draw::clear(fb_main, color::bg);
-				for (auto &[key, module] : lsystem_new::modules) {
-					module.plant.current_branch = 0;
+				for (auto &[key, module] : lsystem_manager.modules) {
+					module->plant.current_branch = 0;
 				}
 			}
-			bool done = lsystem_new::draw_plants_timed(fb_main);
-			if (done) {
+			State state = lsystem_manager.draw_plants_timed(fb_main);
+			if (state == State::Error) { return 1; }
+			if (state == State::True) {
 				lsystem_new::plants_redrawing = false;
-			} else {
+			} else if (state == State::False) {
 				lsystem_new::plants_redrawing = true;
 			}
 		}
@@ -131,8 +100,6 @@ int main(int argc, char *argv[]) {
 	cleanup();
 	return 0;
 }
-
-
 
 void process_events() {
   SDL_Event event;
@@ -212,7 +179,7 @@ struct GuiModuleSpec {
 	bool wait_for_coordinates{false};
 };
 
-State update_gui() {
+State update_gui(lsystem_new::LsystemManager& lsystem_manager) {
   ImGui_ImplSDLRenderer3_NewFrame();
   ImGui_ImplSDL3_NewFrame();
   ImGui::NewFrame();
@@ -247,11 +214,9 @@ State update_gui() {
 			if (gui_module_spec.wait_for_coordinates) {
 				if (app::input.mouse_left.just_pressed()) {
 					gui_module_spec.wait_for_coordinates = false;
-					Vec2 start_point = app::input.mouse;
-					int current_module_id = lsystem_new::add_module(lsystem_new::Module{
-							lsystem_new::Plant{start_point,  gk::pi / 2}, lsystem_new::LstringSpec{}});
+					int current_module_id = lsystem_manager.add_module(app::input.mouse, gk::pi / 2);
 					gui_module_spec.tabs.push_back( ModuleTab{gui_module_spec.next_tab_id++, current_module_id} );
-					fmt::print("complexes size: {}\n", lsystem_new::modules.size());
+					fmt::print("current module count: {}\n", lsystem_manager.modules.size());
 				} else {
 				}
 			}
@@ -291,10 +256,11 @@ State update_gui() {
                                   ImGuiTabItemFlags_None)) {
 
 
-						lsystem_new::Module &module = lsystem_new::modules.at(tab.module_id);
+						lsystem_new::Module* module = lsystem_manager.get_module(tab.module_id);
+						assert(module);
 						if (ImGui::Button("Generate L-String")) {
-							module.generation_started = true;
-							State s = lsystem_new::generate_lstring(module);
+							module->generation_started = true;
+							State s = lsystem_new::generate_lstring(*module);
 							if (s == State::Error) { return s; }
 						}
 						// ImGui::SameLine();
@@ -304,38 +270,38 @@ State update_gui() {
 						// }
 						ImGui::SameLine();
 						if (ImGui::Button("Clear L-String")) {
-							module.generation_started = false;
-							module.lstring_spec.current_iteration = 0;
-							module.lstring.clear();
+							module->generation_started = false;
+							module->lstring_spec.current_iteration = 0;
+							module->lstring.clear();
 						}
 						ImGui::SameLine();
 						if (ImGui::Button("Regen Plant")) {
-							module.plant.needs_regen = true;
+							module->plant.needs_regen = true;
 						}
 						if (ImGui::Button("Print L-string")) {
-							fmt::print("L-string: {}\n", module.lstring);
+							fmt::print("L-string: {}\n", module->lstring);
 						}
 
 						// ___AXIOM___
 						// TODO
 						if (ImGui::TreeNode("Axiom")) {
-							if (ImGui::InputText("text", module.lstring_spec.axiom, app::gui.textfield_size)) {
-								if (!module.lstring_spec.generation_started) {
-									lsystem_new::expand_lstring(module);
-									module.plant.needs_regen = true;
+							if (ImGui::InputText("text", module->lstring_spec.axiom, app::gui.textfield_size)) {
+								if (!module->lstring_spec.generation_started) {
+									lsystem_new::expand_lstring(*module);
+									module->plant.needs_regen = true;
 								}
 							}
 							ImGui::TreePop();
 						}
 
 						if (ImGui::Button("Add Rule")) {
-							module.lstring_spec.add_rule();
+							module->lstring_spec.add_rule();
 						}
 
 						// ___RULES___
-						for (int i = 0; i < module.lstring_spec.rules.size(); i++) {
+						for (int i = 0; i < module->lstring_spec.rules.size(); i++) {
 							std::string label = fmt::format("Rule {}", i + 1);
-							auto &rule = module.lstring_spec.rules[i];
+							auto &rule = module->lstring_spec.rules[i];
 
 							// select the symbol the rule works on
 							if (ImGui::TreeNode(label.c_str())) {
@@ -364,27 +330,27 @@ State update_gui() {
 								// TODO
 								if (ImGui::InputText("condition", rule.textfield_condition,
 																 app::gui.textfield_size)) {
-									if (!module.lstring_spec.generation_started) {
-										lsystem_new::expand_lstring(module);
-										module.plant.needs_regen = true;
+									if (!module->lstring_spec.generation_started) {
+										lsystem_new::expand_lstring(*module);
+										module->plant.needs_regen = true;
 									}
 								}
 								if (ImGui::InputText("rule", rule.textfield_rule, 
 																 app::gui.textfield_size)) {
-									if (!module.lstring_spec.generation_started) {
-										lsystem_new::expand_lstring(module);
-										module.plant.needs_regen = true;
+									if (!module->lstring_spec.generation_started) {
+										lsystem_new::expand_lstring(*module);
+										module->plant.needs_regen = true;
 									}
 								}
 								ImGui::TreePop();
 							}
 						}
 
-						ImGui::SliderInt("Iterations", &module.lstring_spec.iterations, 1, 16);
+						ImGui::SliderInt("Iterations", &module->lstring_spec.iterations, 1, 16);
 
 						// ---- default variables ----
-						for (int i = 0; i < module.default_vars.size(); i++) {
-							lsystem_new::Var &var = module.default_vars[i];
+						for (int i = 0; i < module->default_vars.size(); i++) {
+							lsystem_new::Var &var = module->default_vars[i];
 							if (ImGui::Checkbox(fmt::format("{} use slider?", var.label).c_str(),
 										&var.use_slider)) {}
 							if (var.use_slider) {
@@ -396,19 +362,19 @@ State update_gui() {
 											, &(var.value),
 										var.slider_start, var.slider_end)) {
 									(var.expr)[0] = '\0';
-									module.plant.needs_regen = true;
+									module->plant.needs_regen = true;
 								}
 							} else {
 								if (ImGui::InputText(fmt::format("{}_text", var.label).c_str(),
 											var.expr, app::gui.textfield_size)) {
-									module.plant.needs_regen = true;
+									module->plant.needs_regen = true;
 								}
 							}
 						}
 
 						// ---- global variables ----
-						for (int i = 0; i < module.global_vars.size(); i++) {
-							lsystem_new::Var &var = module.global_vars[i];
+						for (int i = 0; i < module->global_vars.size(); i++) {
+							lsystem_new::Var &var = module->global_vars[i];
 							if (ImGui::Checkbox(fmt::format("{} use slider?", var.label).c_str(),
 										&var.use_slider)) {}
 							if (var.use_slider) {
@@ -421,12 +387,12 @@ State update_gui() {
 											, &(var.value),
 										var.slider_start, var.slider_end)) {
 									(var.expr)[0] = '\0';
-									module.plant.needs_regen = true;
+									module->plant.needs_regen = true;
 								}
 							} else {
 								if (ImGui::InputText(fmt::format("{}_text", var.label).c_str(),
 											var.expr, app::gui.textfield_size)) {
-									module.plant.needs_regen = true;
+									module->plant.needs_regen = true;
 								}
 							}
 						}
@@ -435,9 +401,9 @@ State update_gui() {
 					}
 
           if (!open) {
-            // active_tabs.erase(active_tabs.begin() + i);
-						if (!lsystem_new::remove_module((gui_module_spec.tabs.begin() + i)->module_id)) {
-							assert(false && "remove_module fail");
+						{
+						 State state = lsystem_manager.remove_module((gui_module_spec.tabs.begin() + i)->module_id);
+						 if (state == State::Error) { return state; }
 						}
 						gui_module_spec.tabs.erase(gui_module_spec.tabs.begin() + i);
           } else {

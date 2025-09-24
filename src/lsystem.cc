@@ -2,6 +2,61 @@
 #include "core.hpp"
 
 namespace lsystem_new {
+
+State Module::update_vars() {
+  for (int i = global_vars.size() - 1; i >= 0; i--) {
+    Var &var = global_vars[i];
+    if (*(var.expr) == '\0') {
+      continue;
+    }
+    if (var.use_slider) {
+    } else {
+      std::string glob_var_str = var.expr;
+      var.value = evaluate_expression(
+				glob_var_str, nullptr, nullptr, nullptr).value_or(0.f);
+    }
+  }
+  return State::True;
+}
+
+std::optional<float> Module::evaluate_expression(
+		std::string &expression_string, float *x, float *y, float *z) 
+{
+  typedef float T;
+  typedef exprtk::symbol_table<T> symbol_table_t;
+  typedef exprtk::expression<T> expression_t;
+  typedef exprtk::parser<T> parser_t;
+  symbol_table_t symbol_table;
+
+  // add symbol args to symbol table, if given
+  if (x) {
+    symbol_table.add_variable("x", *x);
+  }
+  if (y) {
+    symbol_table.add_variable("y", *y);
+  }
+  if (z) {
+    symbol_table.add_variable("z", *z);
+  }
+
+  // add global vars to symbol table
+  for (int i = global_vars.size() - 1; i >= 0; i--) {
+    Var &var = global_vars[i];
+    symbol_table.add_variable(var.label, var.value);
+  }
+
+  // parse expression
+  expression_t expression;
+  expression.register_symbol_table(symbol_table);
+  parser_t parser;
+  if (!parser.compile(expression_string, expression)) {
+    fmt::print("Expression compile error...\n");
+    fmt::print("expr_string: {}\n", expression_string);
+    return {};
+  }
+  return (T)expression.value();
+}
+
 void update_vars(Module &module) {
 	for (int i = module.global_vars.size() - 1; i >= 0; i--) {
 		Var &var = module.global_vars[i];
@@ -240,14 +295,13 @@ bool generate_plant_timed(Module &module){
 	return true;
 }
 
-bool draw_plants_timed(draw::FrameBuf &fb) {
+State LsystemManager::draw_plants_timed(draw::FrameBuf &fb) {
 	int accum = 0;
 
 	for (int i = lsystem_new::plants_drawn; i < modules.size(); i++) {
-		auto &plant = modules.at(i).plant;
-		auto &current_branch = plant.current_branch;
+		auto &plant = get_module(i)->plant;
 
-		for (int i = current_branch; i < plant.branches.size(); i++) {
+		for (int i = plant.current_branch; i < plant.branches.size(); i++) {
 			print_info(fmt::format("current branch {}\n", i));
 
 			// ---- timing ----
@@ -257,8 +311,8 @@ bool draw_plants_timed(draw::FrameBuf &fb) {
 				// print_info(fmt::format("draw_plant elapsed: {}\n",
 				// 			(elapsed / app::context.frame_time)));
 				if ((elapsed / app::context.frame_time) >= 0.9) {
-					current_branch = i;
-					return false;
+					plant.current_branch = i;
+					return State::False;
 				}
 			}
 
@@ -267,10 +321,10 @@ bool draw_plants_timed(draw::FrameBuf &fb) {
 			const Vec2 &node2 = plant.nodes[branch.node2_id];
 			draw::wide_line(fb, Line2{node1, node2}, plant.color, branch.wd);
 		}
-		current_branch = 0;
+		plant.current_branch = 0;
 		lsystem_new::plants_drawn++;
 	}
-	return true;
+	return State::True;
 }
 
 std::optional<float> _eval_expr(Module module, std::string &expr_string, float *x,

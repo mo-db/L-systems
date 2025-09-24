@@ -90,6 +90,11 @@ inline Video video;
 inline Gui gui;
 inline Input input;
 
+// extern Context context;
+// extern Video video;
+// extern Gui gui;
+// extern Input input;
+
 void init(int width, int height);
 void update_state_queues();
 } // namespace app

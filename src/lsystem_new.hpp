@@ -136,7 +136,7 @@ enum class DefaultVar : size_t { move = 0, rotate = 1, width = 2, COUNT = 3 };
 enum class GlobalVar : size_t { h = 0, i = 1, j = 2, k = 3, COUNT = 4 };
 struct Module {
   Plant plant;
-  LstringSpec lstring_spec;
+  LstringSpec lstring_spec{};
 	std::string lstring{};
 	bool generation_started{false};
   std::vector<Var> default_vars{{"default branch-length", 50.0f},
@@ -144,8 +144,9 @@ struct Module {
                                 {"default width-change", 1.0f}};
   std::vector<Var> global_vars{{"h"}, {"i"}, {"j"}, {"k"}};
 
-	Module(Plant plant_, LstringSpec lstring_spec_) : 
-		plant{plant_}, lstring_spec{lstring_spec_} {}
+	Module(Plant plant_) : plant{plant_} {}
+	Module(const Vec2 &position, const float starting_angle) :
+		plant{position, starting_angle} {}
 
   inline Var &get_default_var(DefaultVar default_var) {
     return default_vars[static_cast<std::size_t>(default_var)];
@@ -153,25 +154,41 @@ struct Module {
   inline Var &get_global_var(GlobalVar global_var) {
     return global_vars[static_cast<std::size_t>(global_var)];
   }
+  State update_vars();
+  std::optional<float> evaluate_expression(std::string &expr_string, float *x,
+                                           float *y, float *z);
 };
 // inline std::vector<Module> modules;
-inline std::unordered_map<int, Module> modules;
-inline int module_counter{};
 
-// add module and return id of this module
-inline int add_module(Module module) {
-  modules.emplace(module_counter++, std::move(module)); // no default ctor required
-	return module_counter - 1;
-}
 
-// remove module by id, true if successfull
-inline bool remove_module(int id) {
-	if (lsystem_new::modules.find(id) == lsystem_new::modules.end()) {
-		return false;
+class LsystemManager {
+	int module_count{};
+public:
+	std::unordered_map<int, std::unique_ptr<Module>> modules;
+	Module* get_module(int id) {
+		if (modules.find(id) == modules.end()) {
+			return nullptr;
+		}
+		return modules.at(id).get();
 	}
-	lsystem_new::modules.erase(id);
-	return true;
-}
+
+	int add_module(const Vec2 &position, const float starting_angle) {
+		modules.emplace(module_count++, std::make_unique<Module>(position, starting_angle));
+		return module_count - 1;
+	}
+
+	State remove_module(int id) {
+		Module* module = get_module(id);
+		if (!module) {
+			print_info("no module found specified id");
+			return State::Error;
+		}
+		modules.erase(id);
+		return State::True;
+	}
+
+	State draw_plants_timed(draw::FrameBuf &fb);
+};
 
 // serializing
 // bool save_rule_as_file(System::Rule &rule, const std::string &save_file_name);
@@ -179,11 +196,36 @@ inline bool remove_module(int id) {
 // std::optional<std::vector<std::string>> scan_saves();
 
 
+// make member of lstring
 State expand_lstring(Module &module);
 State generate_lstring(Module &module);
 
+// make member of module
+std::string _maybe_apply_rule(Module &module, const char symbol, const std::string args);
 std::optional<float> _eval_expr(Module module, std::string &expr_string, float *x,
 																 float *y, float *z);
+void update_vars(Module &module);
+// TODO use the implementation inside module, check for error and return empty
+std::optional<float> get_default(Module &module, const char symbol);
+
+
+// member of turtle
+
+
+
+// free in namespace
+bool op_is_valid(const char op);
+std::string arg_rulearg_substitute(const std::string arg, const std::string rule_arg);
+int parse_args(const std::string &args_str, Args &args);
+bool try_block_match(const char op1, const char op2,
+														const std::string expr1, const std::string expr2);
+bool parse_block(const std::string &block, char &op, std::string &expr, int *n);
+bool parse_arg(const std::string arg, std::string &base, std::string &pattern,
+							 std::vector<std::string> &repeats, std::string & scale);
+
+
+
+
 Vec2 _calculate_move(Plant &plant, const float length);
 void _turn(Turtle &turtle, const float angle);
 void _turtle_action(Module &module, const char c, const float *value);
@@ -193,24 +235,12 @@ bool draw_plants_timed(draw::FrameBuf &fb);
 
 
 // new lstring generation
-bool op_is_valid(const char op);
-bool try_block_match(const char op1, const char op2,
-														const std::string expr1, const std::string expr2);
-// int parse_args(const std::string &args, std::string &x, std::string &y,
-//                      std::string &z);
-int parse_args(const std::string &args_str, Args &args);
-bool parse_block(const std::string &block, char &op, std::string &expr, int *n);
-bool parse_arg(const std::string arg, std::string &base, std::string &pattern,
-							 std::vector<std::string> &repeats, std::string & scale);
-std::string arg_rulearg_substitute(const std::string arg, const std::string rule_arg);
 
-std::string _maybe_apply_rule(Module &module, const char symbol, const std::string args);
+
 
 // calculate x,y,z args for a symbol, if x = 0.0 -> error, y,z default to 0.0
 std::array<float, 3> symbol_eval_args(Module &module, const char symbol, const std::string &args);
 
-std::optional<float> get_default(Module &module, const char symbol);
 
-void update_vars(Module &module);
 
 } // namespace lsystem_new
