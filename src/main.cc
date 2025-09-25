@@ -2,7 +2,6 @@
 #include "app.hpp"
 #include "graphics.hpp"
 #include "rasterize.hpp"
-// #include "lsystem.hpp"
 #include "lsystem_new.hpp"
 #include <lo/lo.h>
 
@@ -10,6 +9,7 @@
 void process_events();
 void lock_frame_buf();
 State update_gui(lsystem_new::LsystemManager& lsystem_manager);
+// TODO implement renderer to images and to screen using Dependency Injection
 void render();
 void cleanup();
 
@@ -18,6 +18,9 @@ int main(int argc, char *argv[]) {
 	app::init(960, 540);
 	draw::FrameBuf fb_main{app::video.window_texture_pixels,
 												 app::video.width, app::video.height};
+  SDL_Surface *frame_surf = 
+		SDL_CreateSurface(app::video.width, app::video.height, SDL_PIXELFORMAT_RGBA32);
+	draw::FrameBuf framebuffer_image = draw::FrameBuf{(uint32_t*)frame_surf->pixels, frame_surf->w, frame_surf->h};
 
 	lsystem_new::LsystemManager lsystem_manager{};
 
@@ -517,6 +520,9 @@ State update_gui(lsystem_new::LsystemManager& lsystem_manager) {
   // }
 	return State::True;
 }
+
+
+// puth in extra file?
 
 void render() {
 	SDL_SetRenderDrawColor(app::video.renderer, 0, 0, 0, 255);
