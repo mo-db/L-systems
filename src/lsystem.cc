@@ -806,54 +806,69 @@ std::string _maybe_apply_rule(Module &module, const char symbol, const std::stri
 	return default_return; 
 }
 
-State generate_lstring(Module &module) {
-	for (int i = 0; i < module.lstring_spec.iterations; i++) {
-		State s = expand_lstring(module);
-		if (s == State::Error) { return s; }
+State regenerate_lstring(Module* module) {
+	for (int i = 0; i <= module->lstring_spec.iteration_count; i++) {
+		if (i == 0) {
+			State state = expand(module, module->lstring_spec.axiom);
+			if (state == State::Error || state == State::False) { return state; }
+		} else {
+			State state = expand(module, module->lstring);
+			if (state == State::Error || state == State::False) { return state; }
+		}
 	}
 	return State::True;
 }
 
-State expand_lstring(Module &module) {
-	auto &current_iteration = module.lstring_spec.current_iteration;
-
-	std::string &lstring = module.lstring;
-	if (!module.generation_started) {
-		lstring.assign(module.lstring_spec.axiom);
+State expand_lstring(Module* module, bool iterate) {
+	if (module->lstring_spec.iteration_count == 0) {
+		State state = expand(module, module->lstring_spec.axiom);
+		if (state == State::Error || state == State::False) { return state; }
+	} else {
+		State state = expand(module, module->lstring);
+		if (state == State::Error || state == State::False) { return state; }
 	}
-  std::string lstring_expanded = "";
+	if (iterate) {
+		module->lstring_spec.iteration_count++;
+	}
+	return State::True;
+}
 
-	// expand lstring and save into lstring_expanded
+void clear_lstring(Module* module) {
+	module->lstring_spec.iteration_count = 0;
+	module->lstring.clear();
+	module->plant.needs_regen = true;
+}
+
+State expand(Module* module, const std::string& string_to_expand) {
+  std::string lstring_expanded{};
 	int index = 0;
-	while (index < lstring.size()) {
-		char c = lstring[index];
+	while (index < string_to_expand.size()) {
+		char c = string_to_expand[index];
 		// some symbols can just be copied directly
 		if (c == '[' || c == ']') {
-			lstring_expanded += lstring[index++];
+			lstring_expanded  += string_to_expand[index++];
 		} else {
-			if (index + 1 >= lstring.size()) { // this makes while condition irrelevant
-				lstring_expanded += _maybe_apply_rule(module, lstring[index], "");
+			if (index + 1 >= string_to_expand.size()) { // this makes while condition irrelevant
+				lstring_expanded  += _maybe_apply_rule(*module, string_to_expand[index], "");
 				break;
-			} else if (lstring[index + 1] != '<') {
-				lstring_expanded += _maybe_apply_rule(module, lstring[index++], "");
+			} else if (string_to_expand[index + 1] != '<') {
+				lstring_expanded  += _maybe_apply_rule(*module, string_to_expand[index++], "");
 			} else {
 				index += 2; // move to after '<'
-				std::string args = util::get_substr(lstring, index, '>');
+				std::string args = util::get_substr(string_to_expand, index, '>');
 				if (args.empty()) {
-					print_info("lstring invalid, expand failed");
+					print_info("string_to_expand invalid, expand failed");
 					return State::False;
 				}
-				lstring_expanded += _maybe_apply_rule(module, c, args);
+				lstring_expanded  += _maybe_apply_rule(*module, c, args);
 				index += args.size() + 1; // move to after '>'
 			}
 		}
 	}
-	// replace lstring with lstring_expanded and return
-	current_iteration++;
-	module.lstring = lstring_expanded;
+	module->lstring = lstring_expanded;
+	module->plant.needs_regen = true;
 	return State::True;
 }
-
 
 // TODO serialize lsystem
 // bool save_rule_as_file(System::Rule &rule, const std::string &save_file_name) {

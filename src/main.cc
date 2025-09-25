@@ -5,6 +5,22 @@
 #include "lsystem_new.hpp"
 #include <lo/lo.h>
 
+// TODO
+// 1. if rule textfield is empty, skip rule
+// 2. angle slider in value*pi
+// 3. width slider has no effect
+//
+//
+// ! these are all for the lstring
+// [expand] -> iteration_count++, generate(1);
+// [generate] -> reset iteration_count, generate(n);
+// [clear] -> iteration_count = 0;
+// [regen] -> generate(iteration_count);
+// ! plant regens automatically on variable change
+
+bool mark_for_regen = false;
+
+bool lstring_live_regen = true;
 
 void process_events();
 void lock_frame_buf();
@@ -23,7 +39,6 @@ int main(int argc, char *argv[]) {
 	draw::FrameBuf framebuffer_image = draw::FrameBuf{(uint32_t*)frame_surf->pixels, frame_surf->w, frame_surf->h};
 
 	lsystem_new::LsystemManager lsystem_manager{};
-
 	app::gui.show_lsystem_window = true;
 	app::gui.show_demo_window = true;
 
@@ -42,8 +57,7 @@ int main(int argc, char *argv[]) {
 			if (s == State::Error) { return 1; }
 		}
 
-		fmt::print("viewport offset: {},{}\n", viewport::spec.xy_offset.x,
-							 viewport::spec.xy_offset.y);
+
 
 		// panning must be changed so it doesnt redraw, it has to use pixels and scale
 		if (viewport::spec.panning_active) {
@@ -56,9 +70,16 @@ int main(int argc, char *argv[]) {
 		// ---- update the global and default variables -> on gui event? ----
 		for (auto &[key, module] : lsystem_manager.modules) {
 			module->update_vars();
-			auto &plant = module->plant;
 
-			// ---- generate plant over one or more frames ----
+			// ---- live generate lstring for low iterations ----
+			if (module->lstring_spec.needs_regen) {
+				module->lstring_spec.needs_regen = false;
+				State state = lsystem_new::regenerate_lstring(module.get());
+				if (state == State::Error) { return 1; }
+			}
+
+			// ---- generate plant ----
+			auto &plant = module->plant;
 			if (plant.needs_regen || plant.regenerating) {
 				if (plant.needs_regen) {
 					print_info("clear plant");
@@ -78,6 +99,7 @@ int main(int argc, char *argv[]) {
 			}
 		}
 
+		// ---- draw plants ----
 		if (lsystem_new::plants_need_redraw || lsystem_new::plants_redrawing) {
 			if (lsystem_new::plants_need_redraw) {
 				lsystem_new::plants_need_redraw = false;
@@ -231,22 +253,17 @@ State update_gui(lsystem_new::LsystemManager& lsystem_manager) {
       static ImGuiTabBarFlags tab_bar_flags =
           ImGuiTabBarFlags_AutoSelectNewTabs | ImGuiTabBarFlags_Reorderable |
           ImGuiTabBarFlags_FittingPolicyShrink;
-      static bool show_leading_button = true;
-      static bool show_trailing_button = true;
-      ImGui::Checkbox("Show Leading TabItemButton()", &show_leading_button);
-      ImGui::Checkbox("Show Trailing TabItemButton()", &show_trailing_button);
 
-      if (ImGui::BeginTabBar("Complexes", tab_bar_flags)) {
+      if (ImGui::BeginTabBar("Modules", tab_bar_flags)) {
 
         // Leading TabItemButton(): click the "?" button to open a menu
-        if (show_leading_button) {
-          if (ImGui::TabItemButton("?", ImGuiTabItemFlags_Leading |
-                                            ImGuiTabItemFlags_NoTooltip)) {
-            ImGui::OpenPopup("MyHelpMenu");
-          }
-        }
+				if (ImGui::TabItemButton("?", ImGuiTabItemFlags_Leading |
+																					ImGuiTabItemFlags_NoTooltip)) {
+					gui_module_spec.wait_for_coordinates = true;
+					ImGui::OpenPopup("MyHelpMenu");
+				}
         if (ImGui::BeginPopup("MyHelpMenu")) {
-          ImGui::Selectable("Hello!");
+          ImGui::Selectable("Select position!");
           ImGui::EndPopup();
         }
 
@@ -255,44 +272,52 @@ State update_gui(lsystem_new::LsystemManager& lsystem_manager) {
           bool open = true;
 					ModuleTab &tab = gui_module_spec.tabs[i];
           std::string name = fmt::format("{}", tab.tab_id);
-          if (ImGui::BeginTabItem(name.c_str(), &open,
-                                  ImGuiTabItemFlags_None)) {
 
-
+          if (ImGui::BeginTabItem(name.c_str(), &open, ImGuiTabItemFlags_None)) {
 						lsystem_new::Module* module = lsystem_manager.get_module(tab.module_id);
 						assert(module);
-						if (ImGui::Button("Generate L-String")) {
-							module->generation_started = true;
-							State s = lsystem_new::generate_lstring(*module);
-							if (s == State::Error) { return s; }
+						if (ImGui::Button("Expand L-String")) {
+							{
+								State state = lsystem_new::expand_lstring(module, true);
+								if (state == State::Error) { return state; }
+							}
 						}
-						// ImGui::SameLine();
-						// if (ImGui::Button("Expand L-String")) {
-						// 		module.lstring = lsystem_new::expand_lstring(module, module.lstring);
-						// 	module.plant.needs_regen = true;
-						// }
+						ImGui::SameLine();
+						if (ImGui::Button("Regenerate L-String")) {
+							{
+								State state = lsystem_new::regenerate_lstring(module);
+								if (state == State::Error) { return state; }
+							}
+						}
 						ImGui::SameLine();
 						if (ImGui::Button("Clear L-String")) {
-							module->generation_started = false;
-							module->lstring_spec.current_iteration = 0;
-							module->lstring.clear();
+							lsystem_new::clear_lstring(module);
 						}
 						ImGui::SameLine();
 						if (ImGui::Button("Regen Plant")) {
 							module->plant.needs_regen = true;
 						}
+						ImGui::SameLine();
+						ImGui::Text("Current iteration: %d", module->lstring_spec.current_iteration);
 						if (ImGui::Button("Print L-string")) {
 							fmt::print("L-string: {}\n", module->lstring);
 						}
+
+
+						// 1. if current iteration is 0
+						// 2. every frame check if lstring needs regen
 
 						// ___AXIOM___
 						// TODO
 						if (ImGui::TreeNode("Axiom")) {
 							if (ImGui::InputText("text", module->lstring_spec.axiom, app::gui.textfield_size)) {
-								if (!module->lstring_spec.generation_started) {
-									lsystem_new::expand_lstring(*module);
-									module->plant.needs_regen = true;
+								if (lstring_live_regen) {
+									module->lstring_spec.needs_regen = true;
 								}
+								// 	State state = lsystem_new::expand(module, module->lstring_spec.axiom);
+								// 	if (state == State::Error) { return state; }
+								// 	module->lstring_spec.iteration_count = 1;
+								// }
 							}
 							ImGui::TreePop();
 						}
@@ -330,20 +355,28 @@ State update_gui(lsystem_new::LsystemManager& lsystem_manager) {
 									ImGui::EndCombo();
 								}
 
-								// TODO
 								if (ImGui::InputText("condition", rule.textfield_condition,
 																 app::gui.textfield_size)) {
-									if (!module->lstring_spec.generation_started) {
-										lsystem_new::expand_lstring(*module);
-										module->plant.needs_regen = true;
+									if (lstring_live_regen) {
+										module->lstring_spec.needs_regen = true;
 									}
+									// if (module->lstring_spec.iteration_count <= 1) {
+									// 	State state = lsystem_new::expand(module, module->lstring_spec.axiom);
+									// 	if (state == State::Error) { return state; }
+									// 	module->lstring_spec.iteration_count = 1;
+									// }
 								}
 								if (ImGui::InputText("rule", rule.textfield_rule, 
 																 app::gui.textfield_size)) {
-									if (!module->lstring_spec.generation_started) {
-										lsystem_new::expand_lstring(*module);
-										module->plant.needs_regen = true;
+
+									if (lstring_live_regen) {
+										module->lstring_spec.needs_regen = true;
 									}
+									// if (module->lstring_spec.iteration_count <= 1) {
+									// 	State state = lsystem_new::expand(module, module->lstring_spec.axiom);
+									// 	if (state == State::Error) { return state; }
+									// 	module->lstring_spec.iteration_count = 1;
+									// }
 								}
 								ImGui::TreePop();
 							}

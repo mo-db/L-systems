@@ -119,8 +119,10 @@ struct Rule {
 };
 
 struct LstringSpec {
+	bool needs_regen{false};
 	int current_iteration{};
-	int iterations{1};
+	int iteration_count{};
+	int iterations{}; // how often to expand when generate pressed
 	bool generation_started{false};
 	char axiom[app::gui.textfield_size]{};
 	std::vector<Rule> rules;
@@ -158,8 +160,6 @@ struct Module {
   std::optional<float> evaluate_expression(std::string &expr_string, float *x,
                                            float *y, float *z);
 };
-// inline std::vector<Module> modules;
-
 
 class LsystemManager {
 	int module_count{};
@@ -197,8 +197,10 @@ public:
 
 
 // make member of lstring
-State expand_lstring(Module &module);
-State generate_lstring(Module &module);
+State expand_lstring(Module* module, bool iterate);
+void clear_lstring(Module* module);
+State regenerate_lstring(Module* module);
+State expand(Module* module, const std::string& string_to_expand);
 
 // make member of module
 std::string _maybe_apply_rule(Module &module, const char symbol, const std::string args);
