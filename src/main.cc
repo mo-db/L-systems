@@ -29,6 +29,30 @@ State update_gui(lsystem_new::LsystemManager& lsystem_manager);
 void render();
 void cleanup();
 
+State test_evaluate_expression() {
+	std::unordered_map<std::string, float> vars_map{ {"x", 1.0}, {"y", 4.000001}};
+	std::vector<lsystem_new::Var> vars_vector{ {"x", 1.0}, {"y", 4.000001}};
+	std::string expression_string = "x == 1";
+	// for (int i = 0; i < 500; i++) {
+	// 	auto result =  lsystem_new::evaluate_expression_map(expression_string, vars_map, false);
+	// 	if (result.has_value()) {
+	// 		if (!util::equal_epsilon(result.value(), 1.0)) { return State::False; }
+	// 		vars_map["x"] *= 2.;
+	// 		vars_map["x"] -= 5.;
+	// 	} else { return State::False; }
+	// }
+
+	for (int i = 0; i < 500; i++) {
+		auto result =  lsystem_new::evaluate_expression_vector(expression_string, vars_vector, true);
+		if (result.has_value()) {
+			if (!util::equal_epsilon(result.value(), 1.0)) { return State::False; }
+			float test = 1.0 / 41.0;
+			vars_vector[0].value = test * 41.0;
+		} else { return State::False; }
+	}
+	return State::True;
+}
+
 // store lines in main? vector<line>
 int main(int argc, char *argv[]) {
 	app::init(960, 540);
@@ -244,6 +268,18 @@ State update_gui(lsystem_new::LsystemManager& lsystem_manager) {
 					fmt::print("current module count: {}\n", lsystem_manager.modules.size());
 				} else {
 				}
+			}
+
+			if (ImGui::Button("test")) {
+				auto start = util::Clock::now();
+				State state = test_evaluate_expression();
+				if (state == State::False) {
+					fmt::print("Test False\n");
+				} else {
+					fmt::print("Test True\n");
+				}
+				util::ms elapsed = util::Clock::now() - start;
+				fmt::print("time: {}\n", elapsed.count());
 			}
 
 			if (ImGui::Button("Create Module")) {

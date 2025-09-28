@@ -45,3 +45,13 @@
 == interesting systems
 - A -> A[-A]A
 - - -> -[A-A]-
+
+
+
+== new system design
+- A{x,y,z} -> x,y,z are type double
+- x0, y0, z0 -> specify defaults
+- A -> all default
+- $A{l*m, z*t, sin(3)*cos(4)}$
+- [-A]+A[-A{x-1,y*t}
+- [A{x0}-{x0}]

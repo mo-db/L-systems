@@ -1,8 +1,6 @@
 #include "lsystem_new.hpp"
-#include "core.hpp"
 
 namespace lsystem_new {
-
 State Module::update_vars() {
   for (int i = global_vars.size() - 1; i >= 0; i--) {
     Var &var = global_vars[i];
@@ -13,35 +11,145 @@ State Module::update_vars() {
     } else {
       std::string glob_var_str = var.expr;
       var.value = evaluate_expression(
-				glob_var_str, nullptr, nullptr, nullptr).value_or(0.f);
+				glob_var_str, nullptr, nullptr, nullptr, false).value_or(0.f);
     }
   }
   return State::True;
 }
 
-std::optional<float> Module::evaluate_expression(
-		std::string &expression_string, float *x, float *y, float *z) 
+// Use rounding to nearest multiple of epsilon
+template<typename T>
+T quantize_variable(T value, T epsilon) {
+  return std::round(value / epsilon) * epsilon;
+}
+
+// Quantize all values in an unordered_map<string, float>
+std::unordered_map<std::string, float>
+quantize_map(const std::unordered_map<std::string, float>& input,
+             float epsilon = static_cast<float>(gk::epsilon))
 {
-  typedef float T;
+    std::unordered_map<std::string, float> result;
+    result.reserve(input.size());
+
+    for (const auto& [label, value] : input) {
+        result[label] = quantize_variable(value, epsilon);
+    }
+
+    return result;
+}
+
+std::optional<float> evaluate_expression_vector(
+		std::string &expression_string, std::vector<Var> vars, bool quantize) 
+{
+	typedef float T;
   typedef exprtk::symbol_table<T> symbol_table_t;
   typedef exprtk::expression<T> expression_t;
   typedef exprtk::parser<T> parser_t;
   symbol_table_t symbol_table;
+	// T epsilon = gk::epsilon;
+  const T eps = static_cast<T>(gk::epsilon);
+
+
+  std::vector<T> owned_values;
+  owned_values.reserve(vars.size() + 2);
+
+	// register variables (push into owned_values and register reference)
+	for (const auto &var : vars) {
+			T v = quantize ? quantize_variable(static_cast<T>(var.value), eps)
+										 : static_cast<T>(var.value);
+
+			// debug print: show original and quantized values
+			fmt::print("var: {}  quantized: {}\n", var.value, v);
+
+			owned_values.push_back(v);
+			symbol_table.add_variable(var.label, owned_values.back());
+	}
+
+	// optionally expose eps to the expression
+	owned_values.push_back(eps);
+	symbol_table.add_variable(std::string("eps"), owned_values.back());
+
+  // parse expression
+  expression_t expression;
+  expression.register_symbol_table(symbol_table);
+  parser_t parser;
+  if (!parser.compile(expression_string, expression)) {
+    fmt::print("Could not evaluate expression:\n");
+    fmt::print("expr_string: {}\n", expression_string);
+    return {};
+  }
+  return (T)expression.value();
+}
+
+std::optional<float> evaluate_expression_map(
+		std::string &expression_string, std::unordered_map<std::string, float> vars, bool quantize) 
+{
+	typedef float T;
+  typedef exprtk::symbol_table<T> symbol_table_t;
+  typedef exprtk::expression<T> expression_t;
+  typedef exprtk::parser<T> parser_t;
+  symbol_table_t symbol_table;
+	T epsilon = gk::epsilon;
+
+  // add global vars to symbol table
+  // for (int i = 0; i < vars.size(); i++) {
+	for (auto& var : vars) {
+    // Var &var = vars.at(i);
+		if (quantize) {
+    	T var_quantized = quantize_variable(var.second, epsilon);
+			symbol_table.add_variable(var.first, var_quantized);
+		}
+    symbol_table.add_variable(var.first, var.second);
+  }
+
+  // parse expression
+  expression_t expression;
+  expression.register_symbol_table(symbol_table);
+  parser_t parser;
+  if (!parser.compile(expression_string, expression)) {
+    fmt::print("Could not evaluate expression:\n");
+    fmt::print("expr_string: {}\n", expression_string);
+    return {};
+  }
+  return (T)expression.value();
+}
+
+
+std::optional<float> Module::evaluate_expression(
+		std::string &expression_string, float *x, float *y, float *z, bool quantize) 
+{
+	typedef float T;
+  typedef exprtk::symbol_table<T> symbol_table_t;
+  typedef exprtk::expression<T> expression_t;
+  typedef exprtk::parser<T> parser_t;
+  symbol_table_t symbol_table;
+	T epsilon = gk::epsilon;
 
   // add symbol args to symbol table, if given
-  if (x) {
-    symbol_table.add_variable("x", *x);
-  }
-  if (y) {
-    symbol_table.add_variable("y", *y);
-  }
-  if (z) {
-    symbol_table.add_variable("z", *z);
-  }
+	if (quantize) {
+    T xq, yq, zq;
+    if (x) { xq = quantize_variable(*x, epsilon); symbol_table.add_variable("x", xq); }
+    if (y) { yq = quantize_variable(*y, epsilon); symbol_table.add_variable("y", yq); }
+    if (z) { zq = quantize_variable(*z, epsilon); symbol_table.add_variable("z", zq); }
+	} else {
+		if (x) {
+			symbol_table.add_variable("x", *x);
+		}
+		if (y) {
+			symbol_table.add_variable("y", *y);
+		}
+		if (z) {
+			symbol_table.add_variable("z", *z);
+		}
+	}
 
   // add global vars to symbol table
   for (int i = global_vars.size() - 1; i >= 0; i--) {
     Var &var = global_vars[i];
+		if (quantize) {
+    	T iq = quantize_variable(*x, epsilon);
+			symbol_table.add_variable(var.label, iq);
+		}
     symbol_table.add_variable(var.label, var.value);
   }
 
@@ -50,23 +158,11 @@ std::optional<float> Module::evaluate_expression(
   expression.register_symbol_table(symbol_table);
   parser_t parser;
   if (!parser.compile(expression_string, expression)) {
-    fmt::print("Expression compile error...\n");
+    fmt::print("Could not evaluate expression:\n");
     fmt::print("expr_string: {}\n", expression_string);
     return {};
   }
   return (T)expression.value();
-}
-
-void update_vars(Module &module) {
-	for (int i = module.global_vars.size() - 1; i >= 0; i--) {
-		Var &var = module.global_vars[i];
-		if (*(var.expr) == '\0') { continue; }
-		if (var.use_slider) {
-		} else {
-			std::string glob_var_str = var.expr;
-			var.value = _eval_expr(module, glob_var_str, nullptr, nullptr, nullptr).value_or(0.0);
-		}
-	}
 }
 
 Vec2 _calculate_move(Plant &plant, const float length) {
@@ -78,32 +174,15 @@ Vec2 _calculate_move(Plant &plant, const float length) {
 }
 void _turn(Turtle &turtle, const float angle) { turtle.angle += angle; }
 
-
-// this could return possible defaults for all 3 vars
-std::optional<float> get_default(Module &module, const char symbol) {
-	if (std::isalpha(symbol)) {
-		return module.get_default_var(DefaultVar::move).value;
-	}
-	if (symbol == '-' || symbol == '+') {
-		return module.get_default_var(DefaultVar::rotate).value;
-	}
-	// TODO
-	if (symbol == '%' || symbol == '^') {
-		return module.get_default_var(DefaultVar::width).value;
-	}
-	print_info("lstring contains undefined symbol");
-	return {};
-}
-
 // if args are empty returns default or 0.0
-std::array<float, 3> symbol_eval_args(Module &module, const char symbol, const std::string &args_str) {
-	auto result = get_default(module, symbol);
-	if (result == std::nullopt) { return {}; }
-	float x_default = result.value();
+ArgsValue symbol_eval_args(Module &module, const char symbol, const std::string &args_str) {
+	auto symbol_category = get_symbol_category(symbol);
+	if (symbol_category == std::nullopt) { return {}; }
+	Var x_default = module.get_default_var(symbol_category.value());
 
-	std::array<float, 3> defaults{ x_default, 0.0, 0.0 };
+	ArgsValue defaults{ x_default.value, 0.0, 0.0 };
 
-	Args args{};
+	ArgsString args{};
  	int n_args = 0;
 	if (args_str.empty()) {
 		return defaults;
@@ -115,7 +194,7 @@ std::array<float, 3> symbol_eval_args(Module &module, const char symbol, const s
 	}
 
 	// x,y,z values to return
-	std::array<float, 3> values{ 0.0, 0.0, 0.0 };
+ArgsValue values{ 0.0, 0.0, 0.0 };
 
 	// if x or default: n_args = 1, if x,y n_args = 2, and then 3
 	for (int i = n_args - 1; i >= 0; i--) {
@@ -199,14 +278,14 @@ void _turtle_action(Module &module, const char symbol, const std::string args) {
 	Turtle &turtle = plant.turtle;
 	std::vector<Turtle> &turtle_stack = plant.turtle_stack;
 
-	std::array<float, 3> args_ary{};
+	ArgsValue args_value{};
 	if (symbol != '[' && symbol != ']') {
-		args_ary = symbol_eval_args(module, symbol, args);
+		args_value = symbol_eval_args(module, symbol, args);
 	}
 	// TODO why dont i use y and z here?
-	float x = args_ary[0];
-	float y = args_ary[1];
-	float z = args_ary[2];
+	float x = args_value[0];
+	float y = args_value[1];
+	float z = args_value[2];
 
 	// grow branch
 	if (std::isalpha(symbol)) {
@@ -358,7 +437,7 @@ std::optional<float> _eval_expr(Module module, std::string &expr_string, float *
 	return (T)expr.value();
 }
 
-int parse_args(const std::string &args_str, Args &args) {
+int _parse_args(const std::string &args_str, ArgsString &args) {
 	if (args_str.empty()) { return 0; }
   int n_args = 1;
   for (int i = 0; i < args_str.size(); i++) {
@@ -698,7 +777,7 @@ std::string _maybe_apply_rule(Module &module, const char symbol, const std::stri
 	std::string y = "";
 	std::string z = "";
 
-	Args args{};
+	ArgsString args{};
 
  	int n_args = 1;
 	if (!args_str.empty()) {
@@ -733,9 +812,10 @@ std::string _maybe_apply_rule(Module &module, const char symbol, const std::stri
 
 		// TODO: check against condition
 		if (!condition.empty()) {
-			std::array<float, 3> args_ary = symbol_eval_args(module, symbol, args_str);
-			auto result = _eval_expr(module, condition, &args_ary[0], &args_ary[1],
-					&args_ary[2]);
+			ArgsValue args_ary = symbol_eval_args(module, symbol, args_str);
+			auto result = module.evaluate_expression(condition, &args_ary[0], &args_ary[1],
+					&args_ary[2], true);
+			fmt::print("condition: {}\n", result.value_or(-1));
 			if (!result) {
 				// TODO: HALT_GENERATION
 				rule.condition_state = util::STATE::ERROR;
@@ -782,7 +862,7 @@ std::string _maybe_apply_rule(Module &module, const char symbol, const std::stri
 				index += rule_symbol_args.size() + 1; // move index after '>'
 
 				// the args of the symbol occurence in rule
-				Args rule_args{};
+				ArgsString rule_args{};
 				parse_args(rule_symbol_args, rule_args);
 
 				// what to do if impty?

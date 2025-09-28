@@ -7,9 +7,16 @@
 
 namespace lsystem_new {
 static constexpr int textfield_size = 512;
-struct Args {
+struct ArgsString {
 	std::string x, y, z;
 	constexpr std::string& operator[](std::size_t i) noexcept {
+			return (i==0 ? x : (i==1 ? y : z));
+	}
+};
+
+struct ArgsValue {
+	float x, y, z;
+	constexpr float& operator[](std::size_t i) noexcept {
 			return (i==0 ? x : (i==1 ? y : z));
 	}
 };
@@ -18,16 +25,31 @@ struct Args {
 enum class Symbol : size_t {
   A = 0,
   a = 1,
-  rotate_left = 2,
-  rotate_right = 3,
-  inc_width = 4,
-  dec_width = 5,
-  COUNT = 6
+	B = 2,
+	b = 3,
+  RotateLeft = 4,
+  RotateRight = 5,
+  IncWidth = 6,
+  DecWidth = 7,
+  Count = 8
 };
-constexpr std::array<char, static_cast<std::size_t>(Symbol::COUNT)> symbols{
-    'A', 'a', '-', '+', '^', '&'};
+constexpr std::array<char, static_cast<std::size_t>(Symbol::Count)> symbols {
+    'A', 'a', 'B', 'b', '-', '+', '^', '&'};
 inline char get_symbol(Symbol symbol) {
   return symbols[static_cast<std::size_t>(symbol)];
+}
+enum class SymbolCategory : size_t { Move = 0, Rotate = 1, Width = 2, COUNT = 3 };
+inline std::optional<SymbolCategory> get_symbol_category(const char ch) {
+	if (std::isalpha(ch)) {
+		return SymbolCategory::Move;
+	}
+	if (ch == '-' || ch == '+') {
+		return SymbolCategory::Rotate;
+	}
+	if (ch == '^' || ch == '&') {
+		return SymbolCategory::Width;
+	}
+	return std::nullopt;
 }
 
 // declaration of the Var type
@@ -118,47 +140,48 @@ struct Rule {
 	util::STATE condition_state = util::STATE::FALSE; // TODO
 };
 
-struct LstringSpec {
-	bool needs_regen{false};
-	int current_iteration{};
+struct GenerationManager {
+	bool regen_needed{true};
+	bool regen_done{false};
+	int current_index{};
+	std::string lstring_buffer{};
 	int iteration_count{};
-	int iterations{}; // how often to expand when generate pressed
 	bool generation_started{false};
 	char axiom[app::gui.textfield_size]{};
 	std::vector<Rule> rules;
 	inline void add_rule() { rules.push_back(Rule{}); }
-	inline std::string generate(std::string &lstring) { return lstring; }
 };
 
 // ---- object for the whole lsystem data ----
 inline bool plants_need_redraw{true};
 inline bool plants_redrawing{false};
 inline int plants_drawn{0};
-enum class DefaultVar : size_t { move = 0, rotate = 1, width = 2, COUNT = 3 };
 enum class GlobalVar : size_t { h = 0, i = 1, j = 2, k = 3, COUNT = 4 };
 struct Module {
   Plant plant;
-  LstringSpec lstring_spec{};
+  GenerationManager generation_manager{};
 	std::string lstring{};
-	bool generation_started{false};
   std::vector<Var> default_vars{{"default branch-length", 50.0f},
                                 {"default rotation-angle", gk::pi / 2.0f},
                                 {"default width-change", 1.0f}};
   std::vector<Var> global_vars{{"h"}, {"i"}, {"j"}, {"k"}};
+  std::unordered_map<std::string, double> global_variables{
+      {"h", 0.0}, {"i", 0.0}, {"k", 0.0}, {"k", 0.0}};
 
-	Module(Plant plant_) : plant{plant_} {}
-	Module(const Vec2 &position, const float starting_angle) :
-		plant{position, starting_angle} {}
+  Module(Plant plant_) : plant{plant_} {}
+  Module(const Vec2 &position, const float starting_angle)
+      : plant{position, starting_angle} {}
 
-  inline Var &get_default_var(DefaultVar default_var) {
-    return default_vars[static_cast<std::size_t>(default_var)];
+  inline Var &get_default_var(SymbolCategory symbol_category) {
+    return default_vars[static_cast<std::size_t>(symbol_category)];
   }
   inline Var &get_global_var(GlobalVar global_var) {
     return global_vars[static_cast<std::size_t>(global_var)];
   }
   State update_vars();
+
   std::optional<float> evaluate_expression(std::string &expr_string, float *x,
-                                           float *y, float *z);
+                                           float *y, float *z, bool quantize);
 };
 
 class LsystemManager {
@@ -218,7 +241,7 @@ std::optional<float> get_default(Module &module, const char symbol);
 // free in namespace
 bool op_is_valid(const char op);
 std::string arg_rulearg_substitute(const std::string arg, const std::string rule_arg);
-int parse_args(const std::string &args_str, Args &args);
+int parse_args(const std::string &args_str, ArgsString &args);
 bool try_block_match(const char op1, const char op2,
 														const std::string expr1, const std::string expr2);
 bool parse_block(const std::string &block, char &op, std::string &expr, int *n);
@@ -241,7 +264,13 @@ bool draw_plants_timed(draw::FrameBuf &fb);
 
 
 // calculate x,y,z args for a symbol, if x = 0.0 -> error, y,z default to 0.0
-std::array<float, 3> symbol_eval_args(Module &module, const char symbol, const std::string &args);
+ArgsValue symbol_eval_args(Module &module, const char symbol, const std::string &args);
+
+std::optional<float> evaluate_expression_vector(
+		std::string &expression_string, std::vector<Var> vars, bool quantize);
+
+std::optional<float> evaluate_expression_map(
+		std::string &expression_string, std::unordered_map<std::string, float> vars, bool quantize);
 
 
 

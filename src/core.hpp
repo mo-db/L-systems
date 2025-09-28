@@ -51,6 +51,11 @@ inline void print_trace() {
 	Printer p; p.print(st);
 }
 
+enum class Error {
+	Warning,
+	Fatal,
+};
+
 enum class State {
   True,
   False,
