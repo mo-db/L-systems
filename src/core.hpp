@@ -30,26 +30,17 @@
 #include <expected>
 #include <optional>
 
-// SDL
+#include <fmt/core.h>
+#include "libs_header_only/exprtk.hpp"
 #include <SDL3/SDL.h>
 #include <SDL3_image/SDL_image.h>
-#include <fmt/core.h>
 #include "imgui.h"
-#include "imgui_stdlib.h"
-#include "imgui_impl_sdl3.h"
 #include "imgui_impl_sdlrenderer3.h"
-#include "header_only_libs/exprtk.hpp"
-#include "header_only_libs/backward.hpp"
+#include "imgui_impl_sdl3.h"
 
 
 #define print_info(msg) \
     std::cout << "INFO:" << __FILE__ << ":" << __LINE__ << ":" << __func__ << "(), " << msg << std::endl;
-
-inline void print_trace() {
-	using namespace backward;
-	StackTrace st; st.load_here(32);
-	Printer p; p.print(st);
-}
 
 enum class Error {
 	Warning,

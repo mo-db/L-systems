@@ -2,56 +2,17 @@
 #include "app.hpp"
 #include "graphics.hpp"
 #include "rasterize.hpp"
-#include "lsystem_new.hpp"
-#include <lo/lo.h>
-
-// TODO
-// 1. if rule textfield is empty, skip rule
-// 2. angle slider in value*pi
-// 3. width slider has no effect
-//
-//
-// ! these are all for the lstring
-// [expand] -> iteration_count++, generate(1);
-// [generate] -> reset iteration_count, generate(n);
-// [clear] -> iteration_count = 0;
-// [regen] -> generate(iteration_count);
-// ! plant regens automatically on variable change
+#include "lsystem.hpp"
 
 bool mark_for_regen = false;
-
 bool lstring_live_regen = true;
 
 void process_events();
 void lock_frame_buf();
-State update_gui(lsystem_new::LsystemManager& lsystem_manager);
+State update_gui(lsystem::LsystemManager& lsystem_manager);
 // TODO implement renderer to images and to screen using Dependency Injection
 void render();
 void cleanup();
-
-State test_evaluate_expression() {
-	std::unordered_map<std::string, float> vars_map{ {"x", 1.0}, {"y", 4.000001}};
-	std::vector<lsystem_new::Var> vars_vector{ {"x", 1.0}, {"y", 4.000001}};
-	std::string expression_string = "x == 1";
-	// for (int i = 0; i < 500; i++) {
-	// 	auto result =  lsystem_new::evaluate_expression_map(expression_string, vars_map, false);
-	// 	if (result.has_value()) {
-	// 		if (!util::equal_epsilon(result.value(), 1.0)) { return State::False; }
-	// 		vars_map["x"] *= 2.;
-	// 		vars_map["x"] -= 5.;
-	// 	} else { return State::False; }
-	// }
-
-	for (int i = 0; i < 500; i++) {
-		auto result =  lsystem_new::evaluate_expression_vector(expression_string, vars_vector, true);
-		if (result.has_value()) {
-			if (!util::equal_epsilon(result.value(), 1.0)) { return State::False; }
-			float test = 1.0 / 41.0;
-			vars_vector[0].value = test * 41.0;
-		} else { return State::False; }
-	}
-	return State::True;
-}
 
 // store lines in main? vector<line>
 int main(int argc, char *argv[]) {
@@ -62,7 +23,7 @@ int main(int argc, char *argv[]) {
 		SDL_CreateSurface(app::video.width, app::video.height, SDL_PIXELFORMAT_RGBA32);
 	draw::FrameBuf framebuffer_image = draw::FrameBuf{(uint32_t*)frame_surf->pixels, frame_surf->w, frame_surf->h};
 
-	lsystem_new::LsystemManager lsystem_manager{};
+	lsystem::LsystemManager lsystem_manager{};
 	app::gui.show_lsystem_window = true;
 	app::gui.show_demo_window = true;
 
@@ -88,66 +49,6 @@ int main(int argc, char *argv[]) {
 			}
 			// puts("pan active");
 		}
-
-
-		for (auto &[key, module] : lsystem_manager.modules) {
-			State state =	lsystem_new::update_module(module.get());
-			if (state == State::Error) { return 1; }
-		}
-
-
-
-		// ---- update the global and default variables -> on gui event? ----
-		for (auto &[key, module] : lsystem_manager.modules) {
-			module->update_vars();
-
-			// ---- live generate lstring for low iterations ----
-			if (module->lstring_spec.needs_regen) {
-				module->lstring_spec.needs_regen = false;
-				State state = lsystem_new::regenerate_lstring(module.get());
-				if (state == State::Error) { return 1; }
-			}
-
-			// ---- generate plant ----
-			auto &plant = module->plant;
-			if (plant.needs_regen || plant.regenerating) {
-				if (plant.needs_regen) {
-					print_info("clear plant");
-					plant.needs_regen = false;
-					plant.needs_redraw = true;
-					plant.current_lstring_index = 0;
-					plant.clear();
-				}
-				bool done = generate_plant_timed(*module);
-				if (done) {
-					plant.regenerating = false;
-				} else {
-					done = generate_plant_timed(*module);
-					plant.regenerating = true;
-				}
-				lsystem_new::plants_need_redraw = true;
-			}
-		}
-
-		// ---- draw plants ----
-		if (lsystem_new::plants_need_redraw || lsystem_new::plants_redrawing) {
-			if (lsystem_new::plants_need_redraw) {
-				lsystem_new::plants_need_redraw = false;
-				lsystem_new::plants_drawn = false;
-				draw::clear(fb_main, color::bg);
-				for (auto &[key, module] : lsystem_manager.modules) {
-					module->plant.current_branch = 0;
-				}
-			}
-			State state = lsystem_manager.draw_plants_timed(fb_main);
-			if (state == State::Error) { return 1; }
-			if (state == State::True) {
-				lsystem_new::plants_redrawing = false;
-			} else if (state == State::False) {
-				lsystem_new::plants_redrawing = true;
-			}
-		}
-
 
 		// ---- push framebuffer and render gui ----
 		render();
@@ -234,265 +135,265 @@ struct GuiModuleSpec {
 	bool wait_for_coordinates{false};
 };
 
-State update_gui(lsystem_new::LsystemManager& lsystem_manager) {
+State update_gui(lsystem::LsystemManager& lsystem_manager) {
   ImGui_ImplSDLRenderer3_NewFrame();
   ImGui_ImplSDL3_NewFrame();
   ImGui::NewFrame();
 
-  // window_a
+  // demo_window
   if (app::gui.show_demo_window) {
     ImGui::ShowDemoWindow(&app::gui.show_demo_window);
   }
 
   // ___LSYSTEM_MAIN___
-  static bool open = true;
-  bool *p_open = &open;
-  if (app::gui.show_lsystem_window) {
-
-    ImGui::SetNextWindowSize(ImVec2(500, 440), ImGuiCond_FirstUseEver);
-    if (ImGui::Begin("L-System", &app::gui.show_lsystem_window,
-                     ImGuiWindowFlags_MenuBar)) {
-
-    // ___MENU_BAR___
-      if (ImGui::BeginMenuBar()) {
-        if (ImGui::BeginMenu("File")) {
-          if (ImGui::MenuItem("Close", "Ctrl+W")) {
-            *p_open = false;
-          }
-          ImGui::EndMenu();
-        }
-        ImGui::EndMenuBar();
-      }
-
-			static GuiModuleSpec gui_module_spec{};
-
-			if (gui_module_spec.wait_for_coordinates) {
-				if (app::input.mouse_left.just_pressed()) {
-					gui_module_spec.wait_for_coordinates = false;
-					int current_module_id = lsystem_manager.add_module(app::input.mouse, gk::pi / 2);
-					gui_module_spec.tabs.push_back( ModuleTab{gui_module_spec.next_tab_id++, current_module_id} );
-					fmt::print("current module count: {}\n", lsystem_manager.modules.size());
-				} else {
-				}
-			}
-
-			if (ImGui::Button("test")) {
-				auto start = util::Clock::now();
-				State state = test_evaluate_expression();
-				if (state == State::False) {
-					fmt::print("Test False\n");
-				} else {
-					fmt::print("Test True\n");
-				}
-				util::ms elapsed = util::Clock::now() - start;
-				fmt::print("time: {}\n", elapsed.count());
-			}
-
-			if (ImGui::Button("Create Module")) {
-				gui_module_spec.wait_for_coordinates = true;
-			}
-
-      static ImGuiTabBarFlags tab_bar_flags =
-          ImGuiTabBarFlags_AutoSelectNewTabs | ImGuiTabBarFlags_Reorderable |
-          ImGuiTabBarFlags_FittingPolicyShrink;
-
-      if (ImGui::BeginTabBar("Modules", tab_bar_flags)) {
-
-        // Leading TabItemButton(): click the "?" button to open a menu
-				if (ImGui::TabItemButton("?", ImGuiTabItemFlags_Leading |
-																					ImGuiTabItemFlags_NoTooltip)) {
-					gui_module_spec.wait_for_coordinates = true;
-					ImGui::OpenPopup("MyHelpMenu");
-				}
-        if (ImGui::BeginPopup("MyHelpMenu")) {
-          ImGui::Selectable("Select position!");
-          ImGui::EndPopup();
-        }
-
-        // Submit our regular tabs
-        for (int i = 0; i < gui_module_spec.tabs.size();) {
-          bool open = true;
-					ModuleTab &tab = gui_module_spec.tabs[i];
-          std::string name = fmt::format("{}", tab.tab_id);
-
-          if (ImGui::BeginTabItem(name.c_str(), &open, ImGuiTabItemFlags_None)) {
-						lsystem_new::Module* module = lsystem_manager.get_module(tab.module_id);
-						assert(module);
-						if (ImGui::Button("Expand L-String")) {
-							{
-								State state = lsystem_new::expand_lstring(module, true);
-								if (state == State::Error) { return state; }
-							}
-						}
-						ImGui::SameLine();
-						if (ImGui::Button("Regenerate L-String")) {
-							{
-								State state = lsystem_new::regenerate_lstring(module);
-								if (state == State::Error) { return state; }
-							}
-						}
-						ImGui::SameLine();
-						if (ImGui::Button("Clear L-String")) {
-							lsystem_new::clear_lstring(module);
-						}
-						ImGui::SameLine();
-						if (ImGui::Button("Regen Plant")) {
-							module->plant.needs_regen = true;
-						}
-						ImGui::SameLine();
-						ImGui::Text("Current iteration: %d", module->lstring_spec.current_iteration);
-						if (ImGui::Button("Print L-string")) {
-							fmt::print("L-string: {}\n", module->lstring);
-						}
-
-
-						// 1. if current iteration is 0
-						// 2. every frame check if lstring needs regen
-
-						// ___AXIOM___
-						// TODO
-						if (ImGui::TreeNode("Axiom")) {
-							if (ImGui::InputText("text", module->lstring_spec.axiom, app::gui.textfield_size)) {
-								if (lstring_live_regen) {
-									module->lstring_spec.needs_regen = true;
-								}
-								// 	State state = lsystem_new::expand(module, module->lstring_spec.axiom);
-								// 	if (state == State::Error) { return state; }
-								// 	module->lstring_spec.iteration_count = 1;
-								// }
-							}
-							ImGui::TreePop();
-						}
-
-						if (ImGui::Button("Add Rule")) {
-							module->lstring_spec.add_rule();
-						}
-
-						// ___RULES___
-						for (int i = 0; i < module->lstring_spec.rules.size(); i++) {
-							std::string label = fmt::format("Rule {}", i + 1);
-							auto &rule = module->lstring_spec.rules[i];
-
-							// select the symbol the rule works on
-							if (ImGui::TreeNode(label.c_str())) {
-								// ___SYMBOL_SELECTION_COMNO___
-								static ImGuiComboFlags flags = 0;
-								std::string symbol_str = fmt::format("{}", rule.symbol);
-								const char *combo_preview_value = symbol_str.c_str();
-									// &rule.symbol;
-								if (ImGui::BeginCombo("symbol", combo_preview_value, flags)) {
-									for (int n = 0; n < lsystem_new::symbols.size(); n++) {
-										char symbol = lsystem_new::symbols[n];
-										const bool is_selected = (symbol == rule.symbol);
-
-										symbol_str = fmt::format("{}", symbol);
-										if (ImGui::Selectable(symbol_str.c_str(), is_selected))
-											rule.symbol = symbol;
-
-										// Set the initial focus when opening the combo (scrolling +
-										// keyboard navigation focus)
-										if (is_selected)
-											ImGui::SetItemDefaultFocus();
-									}
-									ImGui::EndCombo();
-								}
-
-								if (ImGui::InputText("condition", rule.textfield_condition,
-																 app::gui.textfield_size)) {
-									if (lstring_live_regen) {
-										module->lstring_spec.needs_regen = true;
-									}
-									// if (module->lstring_spec.iteration_count <= 1) {
-									// 	State state = lsystem_new::expand(module, module->lstring_spec.axiom);
-									// 	if (state == State::Error) { return state; }
-									// 	module->lstring_spec.iteration_count = 1;
-									// }
-								}
-								if (ImGui::InputText("rule", rule.textfield_rule, 
-																 app::gui.textfield_size)) {
-
-									if (lstring_live_regen) {
-										module->lstring_spec.needs_regen = true;
-									}
-									// if (module->lstring_spec.iteration_count <= 1) {
-									// 	State state = lsystem_new::expand(module, module->lstring_spec.axiom);
-									// 	if (state == State::Error) { return state; }
-									// 	module->lstring_spec.iteration_count = 1;
-									// }
-								}
-								ImGui::TreePop();
-							}
-						}
-
-						ImGui::SliderInt("Iterations", &module->lstring_spec.iterations, 1, 16);
-
-						// ---- default variables ----
-						for (int i = 0; i < module->default_vars.size(); i++) {
-							lsystem_new::Var &var = module->default_vars[i];
-							if (ImGui::Checkbox(fmt::format("{} use slider?", var.label).c_str(),
-										&var.use_slider)) {}
-							if (var.use_slider) {
-								ImGui::InputFloat(fmt::format("{}_min", var.label).c_str(),
-										&(var.slider_start));
-								ImGui::InputFloat(fmt::format("{}_max", var.label).c_str(),
-										&(var.slider_end));
-								if (ImGui::SliderFloat(fmt::format("{}_slider", var.label).c_str()
-											, &(var.value),
-										var.slider_start, var.slider_end)) {
-									(var.expr)[0] = '\0';
-									module->plant.needs_regen = true;
-								}
-							} else {
-								if (ImGui::InputText(fmt::format("{}_text", var.label).c_str(),
-											var.expr, app::gui.textfield_size)) {
-									module->plant.needs_regen = true;
-								}
-							}
-						}
-
-						// ---- global variables ----
-						for (int i = 0; i < module->global_vars.size(); i++) {
-							lsystem_new::Var &var = module->global_vars[i];
-							if (ImGui::Checkbox(fmt::format("{} use slider?", var.label).c_str(),
-										&var.use_slider)) {}
-							if (var.use_slider) {
-								// ImGui::SameLine();
-								ImGui::InputFloat(fmt::format("{}_min", var.label).c_str(),
-										&(var.slider_start));
-								ImGui::InputFloat(fmt::format("{}_max", var.label).c_str(),
-										&(var.slider_end));
-								if (ImGui::SliderFloat(fmt::format("{}_slider", var.label).c_str()
-											, &(var.value),
-										var.slider_start, var.slider_end)) {
-									(var.expr)[0] = '\0';
-									module->plant.needs_regen = true;
-								}
-							} else {
-								if (ImGui::InputText(fmt::format("{}_text", var.label).c_str(),
-											var.expr, app::gui.textfield_size)) {
-									module->plant.needs_regen = true;
-								}
-							}
-						}
-
-						ImGui::EndTabItem();
-					}
-
-          if (!open) {
-						{
-						 State state = lsystem_manager.remove_module((gui_module_spec.tabs.begin() + i)->module_id);
-						 if (state == State::Error) { return state; }
-						}
-						gui_module_spec.tabs.erase(gui_module_spec.tabs.begin() + i);
-          } else {
-            i++;
-          }
-        }
-        ImGui::EndTabBar();
-      }
-    }
-    ImGui::End();
-  }
+  // static bool open = true;
+  // bool *p_open = &open;
+  // if (app::gui.show_lsystem_window) {
+  //
+  //   ImGui::SetNextWindowSize(ImVec2(500, 440), ImGuiCond_FirstUseEver);
+  //   if (ImGui::Begin("L-System", &app::gui.show_lsystem_window,
+  //                    ImGuiWindowFlags_MenuBar)) {
+  //
+  //   // ___MENU_BAR___
+  //     if (ImGui::BeginMenuBar()) {
+  //       if (ImGui::BeginMenu("File")) {
+  //         if (ImGui::MenuItem("Close", "Ctrl+W")) {
+  //           *p_open = false;
+  //         }
+  //         ImGui::EndMenu();
+  //       }
+  //       ImGui::EndMenuBar();
+  //     }
+  //
+  // 	static GuiModuleSpec gui_module_spec{};
+  //
+  // 	if (gui_module_spec.wait_for_coordinates) {
+  // 		if (app::input.mouse_left.just_pressed()) {
+  // 			gui_module_spec.wait_for_coordinates = false;
+  // 			int current_module_id = lsystem_manager.add_module(app::input.mouse, gk::pi / 2);
+  // 			gui_module_spec.tabs.push_back( ModuleTab{gui_module_spec.next_tab_id++, current_module_id} );
+  // 			fmt::print("current module count: {}\n", lsystem_manager.modules.size());
+  // 		} else {
+  // 		}
+  // 	}
+  //
+  // 	if (ImGui::Button("test")) {
+  // 		auto start = util::Clock::now();
+  // 		State state = test_evaluate_expression();
+  // 		if (state == State::False) {
+  // 			fmt::print("Test False\n");
+  // 		} else {
+  // 			fmt::print("Test True\n");
+  // 		}
+  // 		util::ms elapsed = util::Clock::now() - start;
+  // 		fmt::print("time: {}\n", elapsed.count());
+  // 	}
+  //
+  // 	if (ImGui::Button("Create Module")) {
+  // 		gui_module_spec.wait_for_coordinates = true;
+  // 	}
+  //
+  //     static ImGuiTabBarFlags tab_bar_flags =
+  //         ImGuiTabBarFlags_AutoSelectNewTabs | ImGuiTabBarFlags_Reorderable |
+  //         ImGuiTabBarFlags_FittingPolicyShrink;
+  //
+  //     if (ImGui::BeginTabBar("Modules", tab_bar_flags)) {
+  //
+  //       // Leading TabItemButton(): click the "?" button to open a menu
+  // 		if (ImGui::TabItemButton("?", ImGuiTabItemFlags_Leading |
+  // 																			ImGuiTabItemFlags_NoTooltip)) {
+  // 			gui_module_spec.wait_for_coordinates = true;
+  // 			ImGui::OpenPopup("MyHelpMenu");
+  // 		}
+  //       if (ImGui::BeginPopup("MyHelpMenu")) {
+  //         ImGui::Selectable("Select position!");
+  //         ImGui::EndPopup();
+  //       }
+  //
+  //       // Submit our regular tabs
+  //       for (int i = 0; i < gui_module_spec.tabs.size();) {
+  //         bool open = true;
+  // 			ModuleTab &tab = gui_module_spec.tabs[i];
+  //         std::string name = fmt::format("{}", tab.tab_id);
+  //
+  //         if (ImGui::BeginTabItem(name.c_str(), &open, ImGuiTabItemFlags_None)) {
+  // 				lsystem::Module* module = lsystem_manager.get_module(tab.module_id);
+  // 				assert(module);
+  // 				if (ImGui::Button("Expand L-String")) {
+  // 					{
+  // 						State state = lsystem::expand_lstring(module, true);
+  // 						if (state == State::Error) { return state; }
+  // 					}
+  // 				}
+  // 				ImGui::SameLine();
+  // 				if (ImGui::Button("Regenerate L-String")) {
+  // 					{
+  // 						State state = lsystem::regenerate_lstring(module);
+  // 						if (state == State::Error) { return state; }
+  // 					}
+  // 				}
+  // 				ImGui::SameLine();
+  // 				if (ImGui::Button("Clear L-String")) {
+  // 					lsystem::clear_lstring(module);
+  // 				}
+  // 				ImGui::SameLine();
+  // 				if (ImGui::Button("Regen Plant")) {
+  // 					module->plant.needs_regen = true;
+  // 				}
+  // 				ImGui::SameLine();
+  // 				ImGui::Text("Current iteration: %d", module->geneartion_manager.current_iteration);
+  // 				if (ImGui::Button("Print L-string")) {
+  // 					fmt::print("L-string: {}\n", module->lstring);
+  // 				}
+  //
+  //
+  // 				// 1. if current iteration is 0
+  // 				// 2. every frame check if lstring needs regen
+  //
+  // 				// ___AXIOM___
+  // 				// TODO
+  // 				if (ImGui::TreeNode("Axiom")) {
+  // 					if (ImGui::InputText("text", module->geneartion_manager.axiom, app::gui.textfield_size)) {
+  // 						if (lstring_live_regen) {
+  // 							module->geneartion_manager.needs_regen = true;
+  // 						}
+  // 						// 	State state = lsystem::expand(module, module->geneartion_manager.axiom);
+  // 						// 	if (state == State::Error) { return state; }
+  // 						// 	module->geneartion_manager.iteration_count = 1;
+  // 						// }
+  // 					}
+  // 					ImGui::TreePop();
+  // 				}
+  //
+  // 				if (ImGui::Button("Add Rule")) {
+  // 					module->geneartion_manager.add_rule();
+  // 				}
+  //
+  // 				// ___RULES___
+  // 				for (int i = 0; i < module->geneartion_manager.rules.size(); i++) {
+  // 					std::string label = fmt::format("Rule {}", i + 1);
+  // 					auto &rule = module->geneartion_manager.rules[i];
+  //
+  // 					// select the symbol the rule works on
+  // 					if (ImGui::TreeNode(label.c_str())) {
+  // 						// ___SYMBOL_SELECTION_COMNO___
+  // 						static ImGuiComboFlags flags = 0;
+  // 						std::string symbol_str = fmt::format("{}", rule.symbol);
+  // 						const char *combo_preview_value = symbol_str.c_str();
+  // 							// &rule.symbol;
+  // 						if (ImGui::BeginCombo("symbol", combo_preview_value, flags)) {
+  // 							for (int n = 0; n < lsystem::symbols.size(); n++) {
+  // 								char symbol = lsystem::symbols[n];
+  // 								const bool is_selected = (symbol == rule.symbol);
+  //
+  // 								symbol_str = fmt::format("{}", symbol);
+  // 								if (ImGui::Selectable(symbol_str.c_str(), is_selected))
+  // 									rule.symbol = symbol;
+  //
+  // 								// Set the initial focus when opening the combo (scrolling +
+  // 								// keyboard navigation focus)
+  // 								if (is_selected)
+  // 									ImGui::SetItemDefaultFocus();
+  // 							}
+  // 							ImGui::EndCombo();
+  // 						}
+  //
+  // 						if (ImGui::InputText("condition", rule.textfield_condition,
+  // 														 app::gui.textfield_size)) {
+  // 							if (lstring_live_regen) {
+  // 								module->geneartion_manager.needs_regen = true;
+  // 							}
+  // 							// if (module->geneartion_manager.iteration_count <= 1) {
+  // 							// 	State state = lsystem::expand(module, module->geneartion_manager.axiom);
+  // 							// 	if (state == State::Error) { return state; }
+  // 							// 	module->geneartion_manager.iteration_count = 1;
+  // 							// }
+  // 						}
+  // 						if (ImGui::InputText("rule", rule.textfield_rule, 
+  // 														 app::gui.textfield_size)) {
+  //
+  // 							if (lstring_live_regen) {
+  // 								module->geneartion_manager.needs_regen = true;
+  // 							}
+  // 							// if (module->geneartion_manager.iteration_count <= 1) {
+  // 							// 	State state = lsystem::expand(module, module->geneartion_manager.axiom);
+  // 							// 	if (state == State::Error) { return state; }
+  // 							// 	module->geneartion_manager.iteration_count = 1;
+  // 							// }
+  // 						}
+  // 						ImGui::TreePop();
+  // 					}
+  // 				}
+  //
+  // 				ImGui::SliderInt("Iterations", &module->geneartion_manager.iterations, 1, 16);
+  //
+  // 				// ---- default variables ----
+  // 				for (int i = 0; i < module->default_vars.size(); i++) {
+  // 					lsystem::Var &var = module->default_vars[i];
+  // 					if (ImGui::Checkbox(fmt::format("{} use slider?", var.label).c_str(),
+  // 								&var.use_slider)) {}
+  // 					if (var.use_slider) {
+  // 						ImGui::InputFloat(fmt::format("{}_min", var.label).c_str(),
+  // 								&(var.slider_start));
+  // 						ImGui::InputFloat(fmt::format("{}_max", var.label).c_str(),
+  // 								&(var.slider_end));
+  // 						if (ImGui::SliderFloat(fmt::format("{}_slider", var.label).c_str()
+  // 									, &(var.value),
+  // 								var.slider_start, var.slider_end)) {
+  // 							(var.expr)[0] = '\0';
+  // 							module->plant.needs_regen = true;
+  // 						}
+  // 					} else {
+  // 						if (ImGui::InputText(fmt::format("{}_text", var.label).c_str(),
+  // 									var.expr, app::gui.textfield_size)) {
+  // 							module->plant.needs_regen = true;
+  // 						}
+  // 					}
+  // 				}
+  //
+  // 				// ---- global variables ----
+  // 				for (int i = 0; i < module->global_vars.size(); i++) {
+  // 					lsystem::Var &var = module->global_vars[i];
+  // 					if (ImGui::Checkbox(fmt::format("{} use slider?", var.label).c_str(),
+  // 								&var.use_slider)) {}
+  // 					if (var.use_slider) {
+  // 						// ImGui::SameLine();
+  // 						ImGui::InputFloat(fmt::format("{}_min", var.label).c_str(),
+  // 								&(var.slider_start));
+  // 						ImGui::InputFloat(fmt::format("{}_max", var.label).c_str(),
+  // 								&(var.slider_end));
+  // 						if (ImGui::SliderFloat(fmt::format("{}_slider", var.label).c_str()
+  // 									, &(var.value),
+  // 								var.slider_start, var.slider_end)) {
+  // 							(var.expr)[0] = '\0';
+  // 							module->plant.needs_regen = true;
+  // 						}
+  // 					} else {
+  // 						if (ImGui::InputText(fmt::format("{}_text", var.label).c_str(),
+  // 									var.expr, app::gui.textfield_size)) {
+  // 							module->plant.needs_regen = true;
+  // 						}
+  // 					}
+  // 				}
+  //
+  // 				ImGui::EndTabItem();
+  // 			}
+  //
+  //         if (!open) {
+  // 				{
+  // 				 State state = lsystem_manager.remove_module((gui_module_spec.tabs.begin() + i)->module_id);
+  // 				 if (state == State::Error) { return state; }
+  // 				}
+  // 				gui_module_spec.tabs.erase(gui_module_spec.tabs.begin() + i);
+  //         } else {
+  //           i++;
+  //         }
+  //       }
+  //       ImGui::EndTabBar();
+  //     }
+  //   }
+  //   ImGui::End();
+  // }
 
 
   // // ___LSYSTEM_MAIN___

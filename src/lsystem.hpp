@@ -5,7 +5,6 @@
 #include "graphics.hpp"
 #include "rasterize.hpp"
 
-
 namespace lsystem {
 static constexpr int textfield_size = 512;
 enum class SymbolIdentifier : size_t {
@@ -172,15 +171,17 @@ State update_module(Module* module, draw::FrameBuf& fb);
 std::vector<double> get_args_values(const std::string args_string);
 std::vector<std::string> split_args(const std::string &args_string);
 
+
 // ---- lstring ----
 State reset_lstring(Module* module);
 State generate_lstring_timed(Module* module);
 State _expand_lstring(Module* module);
+std::string maybe_apply_rule(Module* module, const char symbol, std::vector<double> args);
 
 std::optional<double>
 evaluate_expression(std::unordered_map<std::string, double>& local_variables,
 										std::unordered_map<std::string, double>& global_variables,
-                    std::string& expression_string);
+                    const std::string& expression_string);
 
 std::optional<std::string>
 evaluate_production(std::unordered_map<std::string, double>& local_variables,
