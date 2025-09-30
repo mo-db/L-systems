@@ -7,19 +7,6 @@
 
 namespace lsystem_new {
 static constexpr int textfield_size = 512;
-struct ArgsString {
-	std::string x, y, z;
-	constexpr std::string& operator[](std::size_t i) noexcept {
-			return (i==0 ? x : (i==1 ? y : z));
-	}
-};
-
-struct ArgsValue {
-	float x, y, z;
-	constexpr float& operator[](std::size_t i) noexcept {
-			return (i==0 ? x : (i==1 ? y : z));
-	}
-};
 
 // definition of all possible symbols, for all systems
 enum class Symbol : size_t {
@@ -39,18 +26,7 @@ inline char get_symbol(Symbol symbol) {
   return symbols[static_cast<std::size_t>(symbol)];
 }
 enum class SymbolCategory : size_t { Move = 0, Rotate = 1, Width = 2, COUNT = 3 };
-inline std::optional<SymbolCategory> get_symbol_category(const char ch) {
-	if (std::isalpha(ch)) {
-		return SymbolCategory::Move;
-	}
-	if (ch == '-' || ch == '+') {
-		return SymbolCategory::Rotate;
-	}
-	if (ch == '^' || ch == '&') {
-		return SymbolCategory::Width;
-	}
-	return std::nullopt;
-}
+
 
 // declaration of the Var type
 struct Var {
@@ -141,12 +117,13 @@ struct Rule {
 };
 
 struct GenerationManager {
-	bool regen_needed{true};
-	bool regen_done{false};
+	int current_iteration{};
+	int iterations{};
+
+	bool reset_needed{false};
+	bool done_generating{false};
 	int current_index{};
 	std::string lstring_buffer{};
-	int iteration_count{};
-	bool generation_started{false};
 	char axiom[app::gui.textfield_size]{};
 	std::vector<Rule> rules;
 	inline void add_rule() { rules.push_back(Rule{}); }
@@ -165,6 +142,11 @@ struct Module {
                                 {"default rotation-angle", gk::pi / 2.0f},
                                 {"default width-change", 1.0f}};
   std::vector<Var> global_vars{{"h"}, {"i"}, {"j"}, {"k"}};
+
+	// rework
+	std::unordered_map<SymbolCategory, double> symbol_defaults 
+			{ {SymbolCategory::Move, 50.0}, {SymbolCategory::Rotate, gk::pi / 2.0}, 
+				{SymbolCategory::Width, 50.0}};
   std::unordered_map<std::string, double> global_variables{
       {"h", 0.0}, {"i", 0.0}, {"k", 0.0}, {"k", 0.0}};
 
@@ -272,6 +254,11 @@ std::optional<float> evaluate_expression_vector(
 std::optional<float> evaluate_expression_map(
 		std::string &expression_string, std::unordered_map<std::string, float> vars, bool quantize);
 
+
+
+// rework
+State update_module(Module* module);
+std::optional<SymbolCategory> get_symbol_category(const char ch);
 
 
 } // namespace lsystem_new

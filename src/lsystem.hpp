@@ -5,99 +5,80 @@
 #include "graphics.hpp"
 #include "rasterize.hpp"
 
-// lindenmayer-system
-namespace lm {
-struct Args {
-	std::string x, y, z;
-	constexpr std::string& operator[](std::size_t i) noexcept {
-			return (i==0 ? x : (i==1 ? y : z));
-	}
+
+namespace lsystem {
+static constexpr int textfield_size = 512;
+enum class SymbolIdentifier : size_t {
+  A = 0,
+  a = 1,
+  B = 2,
+  b = 3,
+  RotateLeft = 4,
+  RotateRight = 5,
+  IncWidth = 6,
+  DecWidth = 7,
+  Count = 8
+};
+constexpr std::array<char, static_cast<std::size_t>(SymbolIdentifier::Count)>
+    symbols{'A', 'a', 'B', 'b', '-', '+', '^', '&'};
+
+enum class SymbolCategory : size_t {
+  Move = 0,
+  Rotate = 1,
+  Width = 2,
+  COUNT = 3
 };
 
-struct Var {
-	std::string label = "";
-	char expr[app::gui.textfield_size] = {'\0'};
-	bool use_slider = false;
-	float slider_start = 0.0;
-	float slider_end = 1.0;
-	float value = 0.0;
-	Var(std::string label) : label{label} {}
-};
-
-struct GlobVars {
-	static constexpr int quant = 5;
-	Var l{"l"};
-	Var m{"m"};
-	Var n{"n"};
-	Var o{"o"};
-	Var p{"p"};
-	Var* var(const int i) {
-		switch (i) {
-			case 0: return &l;
-			case 1: return &m;
-			case 2: return &n;
-			case 3: return &o;
-			case 4: return &p;
-			default: return nullptr;
-		}
-	}
-};
-inline GlobVars glob_vars;
-
+// ---- Plant ----
 struct Branch {
-	Vec2 *n1 = nullptr;
-	Vec2 *n2 = nullptr;
-	char branch_type;
-	bool visible = false;
-	int wd = 0.0;
+	int node1_id{};
+	int node2_id{};
+	float wd{0.0f};
+	// bool visible{false};
+	// char branch_type{0};
 };
 
 // the turtle holds all relevant information for drawing a branch
 struct Turtle {
-	Vec2 *node = nullptr;
+	int node_id{};
 	float angle{};
-	//TODO
-	int width = 2; //use float to enable antialiasing later on
-	// some means of color variable
-	Turtle() = default;
-	Turtle(Vec2 *node, const float angle) : node{node}, angle{angle} {}
+	float width{};
+	// Turtle() = default;
+	Turtle(int node_id_, const float angle_) : node_id{node_id_}, angle{angle_} {}
+	void reset(int node_id_, float angle_) {
+		node_id = node_id_;
+		angle = angle_;
+		width = 1.0f;
+	}
 };
 
 struct Plant {
 	Vec2 start_node{};
 	float start_angle{};
 
-	static const std::size_t max_nodes = 1000000; // mil
-	// std::unique_ptr<Vec2[]> nodes; // heap array
-	std::array<Vec2, max_nodes> nodes;
+	uint32_t color{0xFF00FFFF};
+	float width{3.f};
 
-	int node_count = 0;
+	std::vector<Vec2> nodes;
   std::vector<Branch> branches;
+	Plant(Vec2 start_node_, float start_angle_) :
+		start_node{start_node_}, start_angle{start_angle_} {
+			nodes.push_back(start_node);
+	}
 
-	Turtle turtle{};
+	Turtle turtle{0, start_angle};
 	std::vector<Turtle> turtle_stack;
 
-	Plant() = default;
-	Plant(const Vec2 start_node, const float start_angle) :
-		start_node{start_node}, start_angle{start_angle}
-		// nodes{std::make_unique<Vec2[]>(max_nodes)} 
-	{
-		turtle.node = add_node(start_node);
-		turtle.angle = start_angle;
+	inline int add_node(Vec2 node) {
+		nodes.push_back(node);
+		return static_cast<int>(nodes.size()) - 1;
 	}
 
-	void init(const Vec2 start_node_, const float start_angle_) {
-		start_node = start_node_;
-		start_angle = start_angle_;
-		turtle.node = add_node(start_node_);
-		turtle.angle = start_angle_;
-		//turtle.width = 2; // TODO
-	}
-
-	Vec2 *add_node(Vec2 node) {
-		if (node_count >= max_nodes) { return nullptr; }
-		nodes[node_count++] = node;
-		return &nodes[node_count - 1];
+	inline void grow(Vec2 node) {
+		int new_node_id = add_node(node);
+		branches.push_back(Branch{turtle.node_id, new_node_id, turtle.width});
+		turtle.node_id = new_node_id;
+		// could return node_id
 	}
 
 	bool needs_regen = true;
@@ -108,103 +89,114 @@ struct Plant {
 	int current_branch = 0;
 
 	void clear() {
+		nodes.clear();
+		nodes.push_back(start_node);
 		branches.clear();
-		node_count = 0;
-		// TODO
-		// turtle.clear()
-		turtle.node = add_node(start_node);
-		turtle.angle = start_angle;
 		turtle_stack.clear();
-		turtle.width = 2; // TODO
+		turtle.reset(0, start_angle);
 	}
 };
 
-struct System {
-	bool live = true;
+// ---- lstring generation ----
+struct Rule {
+	char symbol{0};
+	char textfield_condition[textfield_size]{};
+	char textfield_rule[textfield_size]{};
+	util::STATE condition_state = util::STATE::FALSE; // TODO
+};
 
-	float standard_length = 50.0;
-	float standard_angle = gk::pi / 2.0;
-	int standard_wd = 1; // could be float with aliasing
-	// int standard_branch_seg_count = 1;
-	static constexpr int alphabet_size = 6;
-	static constexpr int text_size = 512;
-	static constexpr int max_rules = 3;
+struct GenerationManager {
+	int current_iteration{};
+	int iterations{};
 
+	bool reset_needed{false};
+	bool done_generating{false};
+	int current_index{};
+	std::string lstring_buffer{};
+	char axiom[app::gui.textfield_size]{};
+	std::vector<Rule> rules;
+	inline void add_rule() { rules.push_back(Rule{}); }
+};
 
-	static constexpr int n_parameters = 4;
-	char parameter_strings[n_parameters][text_size] = { "0.0", "0.0", "0.0", "0.0" };
-	std::array<float, n_parameters> parameters;
+// ---- object for the whole lsystem data ----
+inline bool plants_need_redraw{true};
+inline bool plants_redrawing{false};
+inline int plants_drawn{0};
+enum class GlobalVar : size_t { h = 0, i = 1, j = 2, k = 3, COUNT = 4 };
+struct Module {
+  Plant plant;
+  GenerationManager generation_manager{};
+	std::string lstring{};
+	std::unordered_map<SymbolCategory, double> symbol_defaults 
+			{ {SymbolCategory::Move, 50.0}, {SymbolCategory::Rotate, gk::pi / 2.0}, 
+				{SymbolCategory::Width, 50.0}};
+  std::unordered_map<std::string, double> global_variables{
+      {"h", 0.0}, {"i", 0.0}, {"j", 0.0}, {"k", 0.0}};
 
-	// A-K
-  const char *alphabet[alphabet_size] = { "A", "a", "B", "b", "+", "-" };
+  Module(Plant plant_) : plant{plant_} {}
+  Module(const Vec2 &position, const float starting_angle)
+      : plant{position, starting_angle} {}
 
-	// only this
-	int iterations = 1;
-	int current_iteration = 0;
-	std::string lstring = "";
-	char axiom[app::gui.textfield_size] = "";
-	struct Rule {
-		int symbol_index = 0;
-		int n_args = 1;
-		char condition[text_size] = { '\0' };
-		util::STATE condition_state = util::STATE::FALSE;
-		char text[text_size] = "";
-	};
-	std::array<Rule, max_rules> rules;
-	bool expand();
-	bool generate() {
-		current_iteration = 0;
-		for (int i = 0; i < iterations; i++) {
-			if(!expand()) { return false; }
+  State update_vars();
+};
+
+class LsystemManager {
+	int module_count{};
+public:
+	std::unordered_map<int, std::unique_ptr<Module>> modules;
+	Module* get_module(int id) {
+		if (modules.find(id) == modules.end()) {
+			return nullptr;
 		}
-		return true;
+		return modules.at(id).get();
+	}
+
+	int add_module(const Vec2 &position, const float starting_angle) {
+		modules.emplace(module_count++, std::make_unique<Module>(position, starting_angle));
+		return module_count - 1;
+	}
+
+	State remove_module(int id) {
+		Module* module = get_module(id);
+		if (!module) {
+			print_info("no module found specified id");
+			return State::Error;
+		}
+		modules.erase(id);
+		return State::True;
 	}
 };
 
-inline System system;
-inline Plant plant;
 
-// generate plant from lstring
+State update_module(Module* module, draw::FrameBuf& fb);
+std::vector<double> get_args_values(const std::string args_string);
+std::vector<std::string> split_args(const std::string &args_string);
 
-// std::optional<float> _eval_expr(std::string &expr_string, const float in_x);
-std::optional<float> _eval_expr(std::string &expr_string, float *x,
-																 float *y, float *z);
-Vec2 _calculate_move(Turtle &turtle, const float length);
+// ---- lstring ----
+State reset_lstring(Module* module);
+State generate_lstring_timed(Module* module);
+State _expand_lstring(Module* module);
+
+std::optional<double>
+evaluate_expression(std::unordered_map<std::string, double>& local_variables,
+										std::unordered_map<std::string, double>& global_variables,
+                    std::string& expression_string);
+
+std::optional<std::string>
+evaluate_production(std::unordered_map<std::string, double>& local_variables,
+										std::unordered_map<std::string, double>& global_variables,
+                    const std::string& production);
+
+// ---- symbol ----
+char get_symbol(SymbolIdentifier symbol_identifier);
+std::optional<SymbolCategory> get_symbol_category(const char ch);
+
+// ---- turtle ----
+Vec2 _calculate_move(Plant &plant, const float length);
 void _turn(Turtle &turtle, const float angle);
-void _turtle_action(Plant &plant, const char c, const float *value);
-Plant generate_plant(const Vec2 start, const std::string lstring);
-bool generate_plant_timed(const std::string &lstring, Plant &plant, 
-		int &current_index);
-bool draw_plant_timed(const lm::Plant &plant, int &current_branch,
-											uint32_t color, draw::FrameBuf &fb);
+State _turtle_action(Plant& plant, const char symbol, double x);
 
-// generate the complete lstring from axiom and rules
-
-
-
-// serializing
-bool save_rule_as_file(System::Rule &rule, const std::string &save_file_name);
-bool load_rule_from_file(System::Rule &rule, std::string &save_file_name);
-std::optional<std::vector<std::string>> scan_saves();
-
-// new lstring generation
-bool op_is_valid(const char op);
-bool try_block_match(const char op1, const char op2,
-														const std::string expr1, const std::string expr2);
-int parse_args(const std::string &args, std::string &x, std::string &y,
-                     std::string &z);
-int parse_args2(const std::string &args_str, Args &args);
-bool parse_block(const std::string &block, char &op, std::string &expr, int *n);
-bool parse_arg(const std::string arg, std::string &base, std::string &pattern,
-							 std::vector<std::string> &repeats, std::string & scale);
-std::string arg_rulearg_substitute(const std::string arg, const std::string rule_arg);
-
-std::string _maybe_apply_rule(const char symbol, const std::string args);
-
-// calculate x,y,z args for a symbol, if x = 0.0 -> error, y,z default to 0.0
-std::array<float, 3> symbol_eval_args(const char symbol, const std::string &args);
-
-std::optional<float> get_default(const char symbol);
-
-void update_vars();
-} // namespace lsystem
+// ---- plant ----
+State generate_plant_timed(Module* module);
+State draw_plant_timed(Module* module, draw::FrameBuf &fb);
+} //namespace lsystem

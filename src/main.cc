@@ -81,8 +81,6 @@ int main(int argc, char *argv[]) {
 			if (s == State::Error) { return 1; }
 		}
 
-
-
 		// panning must be changed so it doesnt redraw, it has to use pixels and scale
 		if (viewport::spec.panning_active) {
 			for (auto &[key, module] : lsystem_manager.modules) {
@@ -90,6 +88,14 @@ int main(int argc, char *argv[]) {
 			}
 			// puts("pan active");
 		}
+
+
+		for (auto &[key, module] : lsystem_manager.modules) {
+			State state =	lsystem_new::update_module(module.get());
+			if (state == State::Error) { return 1; }
+		}
+
+
 
 		// ---- update the global and default variables -> on gui event? ----
 		for (auto &[key, module] : lsystem_manager.modules) {

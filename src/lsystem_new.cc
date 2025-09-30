@@ -1,203 +1,256 @@
-#include "lsystem_new.hpp"
+#include "lsystem.hpp"
 
-namespace lsystem_new {
-State _expand_lstring(Module* module);
-State expand_lstring(Module* module);
-State regenerate_lstring(Module* module);
+namespace lsystem {
+State Module::update_vars() {
+  for (int i = global_vars.size() - 1; i >= 0; i--) {
+    Var &var = global_vars[i];
+    if (*(var.expr) == '\0') {
+      continue;
+    }
+    if (var.use_slider) {
+    } else {
+      std::string glob_var_str = var.expr;
+      var.value = evaluate_expression(
+				glob_var_str, nullptr, nullptr, nullptr, false).value_or(0.f);
+    }
+  }
+  return State::True;
+}
 
-std::optional<double>
-evaluate_expression(std::unordered_map<std::string, double>& local_variables,
-										std::unordered_map<std::string, double>& global_variables,
-                    std::string& expression_string);
+std::optional<SymbolCategory> get_symbol_category(const char ch) {
+	if (std::isalpha(ch)) {
+		return SymbolCategory::Move;
+	}
+	if (ch == '-' || ch == '+') {
+		return SymbolCategory::Rotate;
+	}
+	if (ch == '^' || ch == '&') {
+		return SymbolCategory::Width;
+	}
+	return std::nullopt;
+}
 
-std::optional<std::string>
-evaluate_production(std::unordered_map<std::string, double>& local_variables,
-										std::unordered_map<std::string, double>& global_variables,
-                    const std::string& production);
+char get_symbol(SymbolIdentifier symbol_identifier) {
+  return symbols[static_cast<std::size_t>(symbol_identifier)];
+}
+
+State update_module(Module* module, draw::FrameBuf& fb) {
+	auto& generation_manager = module->generation_manager;
+
+	// if reset is needed, reset, then return, not timed,  never takes that long
+	if (generation_manager.reset_needed == true) {
+		generation_manager.reset_needed = false;
+		State state = reset_lstring(module);
+		return state;
+	}
+
+	{
+		// gets most of frametime
+		State state = generate_lstring_timed(module);
+		if (state == State::Error || state == State::False) { return state; }
+	}
+
+	// draw and gen the plant only if generation of the lstring is finished
+	bool plant_generation_finished = false;
+	bool plant_drawing_finished = false;
+	{
+		// gets some percentage of frametime
+		State state = generate_plant_timed(module);
+		if (state == State::Error) { return state; }
+		if (state == State::True) { plant_generation_finished = true; }
+	}
+	{
+		// gets some percentage of frametime
+		State state = draw_plant_timed(module, fb);
+		if (state == State::Error) { return state; }
+		if (state == State::True) { plant_drawing_finished = true; }
+	}
+
+	// return true if the module is fully updated, all work finished
+	return (plant_generation_finished && plant_drawing_finished) ?
+		State::True : State::False;
+}
+
+Vec2 _calculate_move(Plant &plant, const float length) {
+	Turtle &turtle = plant.turtle;
+	Vec2 position = plant.nodes[turtle.node_id];
+	position.x += length * cos(turtle.angle);
+	position.y += length * -sin(turtle.angle);
+	return position;
+}
+void _turn(Turtle &turtle, const float angle) { turtle.angle += angle; }
+
+State _turtle_action(Plant& plant, const char symbol, double x) {
+	Turtle &turtle = plant.turtle;
+	std::vector<Turtle> &turtle_stack = plant.turtle_stack;
+
+	auto symbol_category = get_symbol_category(symbol);
+	if (symbol_category == std::nullopt) { return State::False; }
+
+	// TODO: visable not used
+	if (symbol_category.value() == SymbolCategory::Move) {
+		bool visable = true;
+		if (std::islower(symbol)) {
+			visable = false;
+		}
+		plant.grow(_calculate_move(plant, x));
+	}
+
+	// turn turtle counter-clockwise
+	if (symbol == '-') {
+    _turn(turtle, -x);
+	}
+	// turn turtle clockwise
+	if (symbol == '+') {
+    _turn(turtle, x);
+	}
+
+	// TODO
+	// this should either set or change the width
+	if (symbol == '%') {
+		turtle.width += 1;
+	}
+
+	// push and pop turtle state
+	if (symbol == '[') {
+    turtle_stack.push_back(turtle);
+	}
+  if (symbol == ']') {
+    turtle = turtle_stack.back();
+    turtle_stack.pop_back();
+	}
+	return State::True;
+}
 
 // this is no longer needed, this will now return a vector<double>
-int parse_args(const std::string &args_string, ArgsString &args) {
-	if (args_string.empty()) { return 0; }
-  int n_args = 1;
+std::vector<std::string> split_args(const std::string &args_string) {
+	if (args_string.empty()) { return std::vector<std::string>{}; }
+	std::vector<std::string> args{};
+	std::string current_string{};
   for (int i = 0; i < args_string.size(); i++) {
     if (args_string[i] == ';') {
-      n_args++;
+			args.push_back(current_string);
+			current_string.clear();
     } else {
-			if (n_args == 1) {
-				args.x += args_string[i];
-			} else if (n_args == 2) {
-				args.y += args_string[i];
-			} else if (n_args == 3) {
-				args.z += args_string[i];
-			} else {
-				return 0;
-			}
+			current_string += args_string[i];
 		}
   }
-  return n_args;
+	args.push_back(current_string);
+  return args;
 }
 
-ArgsValue symbol_get_defaults(Module& module, const char symbol) {
-	auto symbol_category = get_symbol_category(symbol);
-	if (symbol_category == std::nullopt) { return { 0.0, 0.0, 0.0 }; }
-	Var x_default = module.get_default_var(symbol_category.value());
-	return { x_default.value, 0.0, 0.0 };
-}
-
-ArgsValue args_string_get_values(Module& module, const char symbol,
-																 const std::string args_string) {
-	ArgsValue default_args = symbol_get_defaults(module, symbol);
-	ArgsString string_args{};
-	parse_args(args_string, string_args);
-	ArgsValue args{};
-	double x = std::atof(string_args.x.c_str());
-	args.x = (x == 0.0) ? default_args.x : x;
-	double y = std::atof(string_args.y.c_str());
-	args.y = (y == 0.0) ? default_args.y : y;
-	double z = std::atof(string_args.z.c_str());
-	args.z = (z == 0.0) ? default_args.z : z;
+std::vector<double> get_args_values(const std::string args_string) {
+	std::vector<double> args{};
+	std::vector<std::string> split_args_string = split_args(args_string);
+	for (int i = 0; i < split_args_string.size(); i++) {
+		args.push_back(std::atof(split_args_string[i].c_str()));
+	}
 	return args;
 }
 
-// 1. evaluate axiom
+State generate_plant_timed(Module* module){
+	std::string &lstring = module->lstring;
+	Plant &plant = module->plant;
+	int &current_index = plant.current_lstring_index;
 
-// args_string are 3 values seperated by semicolon
-std::string maybe_apply_rule(Module &module, const char symbol, const std::string args_string) {
-	std::string default_return = "";
-	if (args_string.empty()) {
-		default_return = fmt::format("{}", symbol);
-	} else {
-		default_return = fmt::format("{}{{}}", symbol, args_string);
-	}
-
-	// auto result = get_default(symbol);
-	// if (result == std::nullopt) { return ""; }
-	// float x_default = result.value();
-	//
-	// A -> A{x'*5; sin(z); 3}
-
-	// ---- extract args of symbol ----
-	ArgsString args{};
- 	int n_args = 1;
-	if (!args_string.empty()) {
- 		n_args = parse_args(args_string, args);
-		if (n_args == 0) { 
-			print_info("parse_args error");
-			return fmt::format("{}", symbol); // DONO
+	int index = current_index;
+	while (index < lstring.size()) {
+		// ---- timing ----
+		util::ms elapsed = util::Clock::now() - app::context.frame_start;
+		if ((elapsed / app::context.frame_time) >= 0.6) {
+			current_index = index;
+			return State::False;
 		}
+			
+		auto symbol_category = get_symbol_category(lstring[index]);
+		if (symbol_category == std::nullopt) { return State::Error; }
+		double symbol_default = module->symbol_defaults[symbol_category.value()];
+
+		if (index + 1 >= lstring.size() || lstring[index + 1] != '{') { 
+			State state  = _turtle_action(plant, lstring[index], symbol_default);
+		} else if (lstring[index + 1] == '{') {
+			index += 2; // move to after '{'
+			std::string args_string = util::get_substr(lstring, index, '}');
+			if (args_string.empty()) { return State::Error; }
+			std::vector<double> args_values = get_args_values(args_string);
+			State state  = _turtle_action(plant, lstring[index], args_values[0]);
+			index += args_string.size() + 1; // move to after '}'
+		}
+		index++;
 	}
 
-	// fmt::print("args: {}\n", args);
+	current_index = 0;
+	return State::True;
+}
+
+State draw_plant_timed(Module* module, draw::FrameBuf &fb) {
+	auto &plant = module->plant;
+	for (int i = plant.current_branch; i < plant.branches.size(); i++) {
+		// ---- timing ----
+		util::ms elapsed = util::Clock::now() - app::context.frame_start;
+		// print_info(fmt::format("draw_plant elapsed: {}\n",
+		// 			(elapsed / app::context.frame_time)));
+		if ((elapsed / app::context.frame_time) >= 0.9) {
+			plant.current_branch = i;
+			return State::False;
+		}
+
+		auto &branch = plant.branches[i];
+		const Vec2 &node1 = plant.nodes[branch.node1_id];
+		const Vec2 &node2 = plant.nodes[branch.node2_id];
+		draw::wide_line(fb, Line2{node1, node2}, plant.color, branch.wd);
+	}
+	plant.current_branch = 0;
+	return State::True;
+}
+
+std::string maybe_apply_rule(Module* module, const char symbol, std::vector<double> args) {
+	// CHANGE:
+	std::unordered_map<std::string, double> local_variables { {"x", args[0]}, {"y", args[1]}, {"z", args[2]} };
 
 	// ---- try to match a rule ----
-	for (auto &rule : module.lstring_spec.rules) {
+	for (auto &rule : module->generation_manager.rules) {
 		std::string condition = rule.textfield_condition;
 		std::string text = rule.textfield_rule;
 
 		if (rule.symbol != symbol) { continue; }
 
 		if (!condition.empty()) {
-			ArgsValue args_ary = symbol_eval_args(module, symbol, args_str);
-			auto result = module.evaluate_expression(condition, &args_ary[0], &args_ary[1],
-					&args_ary[2], true);
-			fmt::print("condition: {}\n", result.value_or(-1));
+			auto result = evaluate_expression(local_variables, module->global_variables, text);
+			// TODO: draw rule text in red
 			if (!result) {
-				// TODO: HALT_GENERATION
-				rule.condition_state = util::STATE::ERROR;
+				print_info("fuck what to do with condition wrong\n");
 				continue;
-			} else {
-				if (!util::equal_epsilon(result.value(), 1.0)) {
-					continue;
-				}
+			}
+			if (!util::equal_epsilon(result.value(), 1.0)) {
+				continue;
 			}
 		}
 
 		// ---- rule matched -> replace symbol with rule ----
-		std::string return_str = "";
-		int index = 0;
-		while (index < (int)text.size()) {
-			// append args_field if text[index] is not symbol
-			if (text[index] == '<') {
-				while (text[index] != '>') {
-					if (index >= (int)text.size()) {
-						print_info("rule block incomplete");
-						return default_return; 
-					}
-					return_str += text[index++];
-				}
-				return_str += text[index++];
-
-			// append all other characters
-			} else if (text[index] != symbol ) {
-				return_str += text[index++];
-			// substitute args for rule_args
-			} else if (text[index] == symbol) {
-				// text[index] == symbol
-				return_str += text[index++]; // append symbol
-				if (index >= text.size()) { continue; }
-				if (text[index] != '<') { continue; } // replace arg with default
-
-				// ---- symbol with args found in rule ----
-				index++;
-				std::string rule_symbol_args = util::get_substr(text, index, '>');
-				if (rule_symbol_args.empty()) {
-					print_info("rule block incomplete");
-					return default_return; 
-				}
-				index += rule_symbol_args.size() + 1; // move index after '>'
-
-				// the args of the symbol occurence in rule
-				ArgsString rule_args{};
-				parse_args(rule_symbol_args, rule_args);
-
-				// what to do if impty?
-				std::string fin_x = arg_rulearg_substitute(x, rule_args.x); // arg can be empty
-				return_str += '<';
-				return_str += fin_x;
-				if (n_args > 1) {
-					std::string fin_y = arg_rulearg_substitute(y, rule_args.y);
-					return_str += fmt::format(";{}", fin_y);
-				}
-				if (n_args > 2) {
-					std::string fin_z = arg_rulearg_substitute(z, rule_args.z);
-					return_str += fmt::format(";{}", fin_z);
-				}
-				return_str += '>';
-			}
-		} // end while()
-		return return_str;
-	} // end for()
-
-	return default_return; 
+		auto result = evaluate_production(local_variables, module->global_variables, text);
+		if (result == std::nullopt) { return fmt::format("{}", symbol); }
+		return result.value();
+	}
 }
 
-State maybe_regenerate_modules(LsystemManager& lsystem_manager) {
-	for (auto &[key, module] : lsystem_manager.modules) {
-		auto module_ptr = module.get();
-		if (module_ptr->generation_manager.regen_needed == false) { continue; }
-		module_ptr->lstring.clear();
-		std::string axiom = module_ptr->generation_manager.axiom;
-		std::unordered_map<std::string, double> local_variables{};
-		auto result = evaluate_production(local_variables, module_ptr->global_variables, axiom);
-		if (result == std::nullopt) {
-			// TODO: instead of printing, draw text in red
-			print_info("Axiom could not be evaluated\n");
-			continue;
-		}
-		module_ptr->lstring = result.value();
-		// TODO tomorrow
-		// Expand once by default, then generate untill iteration_count reached
-		{
-			State state = expand_lstring(module_ptr);
-		}
-		{
-			State state = regenerate_lstring(module_ptr);
-		}
+State reset_lstring(Module* module) {
+	module->lstring.clear();
+	module->generation_manager.current_iteration = 0;
+	std::string axiom = module->generation_manager.axiom;
+	std::unordered_map<std::string, double> local_variables{};
+	auto result = evaluate_production(local_variables, module->global_variables, axiom);
+	if (result == std::nullopt) {
+		// TODO: instead of printing, draw text in red
+		print_info("Axiom could not be evaluated\n");
+		return State::False;
 	}
+	module->lstring = result.value();
+	module->generation_manager.current_iteration++;
 	return State::True;
 }
 
-// extra wrapper for quantized
+// implement extra wrapper for quantized
 // double quantize_variable(double value, double epsilon) {
 //   return std::round(value / epsilon) * epsilon;
 // }
@@ -216,6 +269,9 @@ State maybe_regenerate_modules(LsystemManager& lsystem_manager) {
 //     return result;
 // }
 
+// CHANGE: dont pass variables by reference???
+// 1. have global symbol storage per module -> global vars, constants like pi, e etc...
+// 2. pass local variables, per value not per reference
 std::optional<double>
 evaluate_expression(std::unordered_map<std::string, double>& local_variables,
 										std::unordered_map<std::string, double>& global_variables,
@@ -229,7 +285,7 @@ evaluate_expression(std::unordered_map<std::string, double>& local_variables,
 	for (auto& variable : local_variables) {
     symbol_table.add_variable(variable.first, variable.second);
   }
-	for (auto& variable : local_variables) {
+	for (auto& variable : global_variables) {
     symbol_table.add_variable(variable.first, variable.second);
   }
 
@@ -246,6 +302,7 @@ evaluate_expression(std::unordered_map<std::string, double>& local_variables,
 }
 
 // return nullopt if eval failed
+// CHANGE: maybe make a function: parse_braced_args()
 std::optional<std::string>
 evaluate_production(std::unordered_map<std::string, double>& local_variables,
 										std::unordered_map<std::string, double>& global_variables,
@@ -271,13 +328,15 @@ evaluate_production(std::unordered_map<std::string, double>& local_variables,
 			auto result =
 				evaluate_expression(local_variables, global_variables, expression);
 			if (result == std::nullopt) { return std::nullopt; }
+			evaluated_production += '{';
 			for (int i = 0; i < args.size(); i++) {
 				if (i + 1 < args.size()) {
-					evaluated_production += fmt::format("{{}};", result.value());
+					evaluated_production += fmt::format("{};", result.value());
 				} else {
-					evaluated_production += fmt::format("{{}}", result.value());
+					evaluated_production += fmt::format("{}", result.value());
 				}
 			}
+			evaluated_production += '}';
 			index++;
 		} else {
 			evaluated_production += production[index++];
@@ -285,58 +344,44 @@ evaluate_production(std::unordered_map<std::string, double>& local_variables,
 	}
 }
 
-State regenerate_lstring(Module* module) {
-	for (int i = 0; i <= module->generation_manager.iteration_count; i++) {
+State generate_lstring(Module* module) {
+	auto& iterations = module->generation_manager.iterations;
+	auto& current_iteration = module->generation_manager.current_iteration;
+	for (int i = current_iteration; i < iterations; i++) {
 		State state = _expand_lstring(module);
 		if (state == State::Error || state == State::False) { return state; }
+		current_iteration++;
 	}
 	return State::True;
 }
 
-State expand_lstring(Module* module) {
-	State state = _expand_lstring(module);
-	if (state == State::Error || state == State::False) { return state; }
-	module->generation_manager.iteration_count++;
-	return State::True;
-}
-
 State _expand_lstring(Module* module) {
-	int& iteration_count = module->generation_manager.iteration_count;
-	std::string axiom = module->generation_manager.axiom;
-
-	const std::string& string_to_expand = (iteration_count == 0) ?
-		axiom : module->lstring;
+	const std::string& lstring = module->lstring;
 	std::string& lstring_buffer = module->generation_manager.lstring_buffer;
-
 	int index = module->generation_manager.current_index;
-	while (index < string_to_expand.size()) {
+
+	while (index < lstring.size()) {
 		// ---- check time -> stop expansion  ----
 		util::ms elapsed = util::Clock::now() - app::context.frame_start;
 		if ((elapsed / app::context.frame_time) >= 0.6) {
 			module->generation_manager.current_index = index;
 			return State::False;
 		}
+
 		// ---- expand one symbol ----
-		char c = string_to_expand[index];
-		if (c == '[' || c == ']') {
-			lstring_buffer  += string_to_expand[index++];
-		} else {
-			if (index + 1 >= string_to_expand.size()) { // this makes while condition irrelevant
-				lstring_buffer  += maybe_apply_rule(*module, string_to_expand[index], "");
-				break;
-			} else if (string_to_expand[index + 1] != '<') {
-				lstring_buffer  += maybe_apply_rule(*module, string_to_expand[index++], "");
-			} else {
-				index += 2; // move to after '<'
-				std::string args = util::get_substr(string_to_expand, index, '>');
-				if (args.empty()) {
-					print_info("string_to_expand invalid, expand failed");
-					return State::False;
-				}
-				lstring_buffer  += maybe_apply_rule(module, symbol, args);
-				index += args.size() + 1; // move to after '>'
-			}
+		if (lstring[index] == '[' || lstring[index] == ']') {
+			lstring_buffer  += lstring[index++];
+		} else if (index + 1 >= lstring.size() || lstring[index + 1] != '{') { 
+			lstring_buffer  += maybe_apply_rule(module, lstring[index], std::vector<double>{});
+		} else if (lstring[index + 1] == '}') {
+			index += 2; // move to after '{'
+			std::string args_string = util::get_substr(lstring, index, '}');
+			if (args_string.empty()) { return State::Error; }
+			std::vector<double> args_values = get_args_values(args_string);
+			lstring_buffer  += maybe_apply_rule(module, lstring[index], args_values);
+			index += args_string.size() + 1; // move to after '}'
 		}
+		index++;
 	}
 
 	// ---- expansion completed ----

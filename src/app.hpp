@@ -6,7 +6,7 @@
 namespace app {
 
 // to keep track if a state changed this frame
-class StateQueue {
+class Statequeue {
   bool current_state{false};
   bool prev_state{false};
 
@@ -23,7 +23,7 @@ public:
 };
 
 // useful to keep track if a button was pressed this frame
-class InputStateQueue {
+class InputStatequeue {
   bool current_state{false};
   bool prev_state{false};
 
@@ -46,6 +46,8 @@ struct Context {
 	std::string exec_path = "";
 	std::string save_path = "";
 	std::string render_path = "";
+	std::vector<Statequeue> state_queue_manager{};
+	std::vector<InputStatequeue> input_statequeue_manager{};
 };
 
 struct Video {
@@ -77,11 +79,11 @@ struct Gui {
 };
 
 struct Input {
-	InputStateQueue mouse_left{};
-	InputStateQueue mouse_middle{};
-	InputStateQueue mouse_right{};
-	InputStateQueue shift{};
-	InputStateQueue ctrl{};
+	InputStatequeue mouse_left{};
+	InputStatequeue mouse_middle{};
+	InputStatequeue mouse_right{};
+	InputStatequeue shift{};
+	InputStatequeue ctrl{};
 	Vec2 mouse{};
 };
 
