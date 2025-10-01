@@ -2,17 +2,40 @@
 #include "app.hpp"
 #include "graphics.hpp"
 #include "rasterize.hpp"
-#include "lsystem.hpp"
+#include "lsystem_new.hpp"
 
 bool mark_for_regen = false;
 bool lstring_live_regen = true;
 
 void process_events();
 void lock_frame_buf();
-State update_gui(lsystem::LsystemManager& lsystem_manager);
+State update_gui(lsystem_new::LsystemManager& lsystem_manager);
 // TODO implement renderer to images and to screen using Dependency Injection
 void render();
 void cleanup();
+
+State test_parse_symbol(const std::string& lstring) {
+	int index{};
+	while(index < lstring.size()) {
+		char symbol{};
+		std::vector<double> args{};
+		auto result = lsystem_new::parse_symbol(lstring, index, symbol, args);
+		if (result == std::nullopt) { return State::Error; }
+		if (result.value() == 0) {
+			// symbol is last char
+			fmt::print("index-{}: {}\n", index, symbol);
+			break;
+		}
+		fmt::print("index-{}: \n", index);
+		for (auto & arg : args) {
+			fmt::print("{},", arg);
+		}
+		fmt::print("\n");
+		index = result.value();
+	}
+	return State::True;
+}
+
 
 // store lines in main? vector<line>
 int main(int argc, char *argv[]) {
@@ -23,7 +46,10 @@ int main(int argc, char *argv[]) {
 		SDL_CreateSurface(app::video.width, app::video.height, SDL_PIXELFORMAT_RGBA32);
 	draw::FrameBuf framebuffer_image = draw::FrameBuf{(uint32_t*)frame_surf->pixels, frame_surf->w, frame_surf->h};
 
-	lsystem::LsystemManager lsystem_manager{};
+	lsystem_new::LsystemManager lsystem_manager{};
+	int tg_id = lsystem_manager.add_generator();
+	lsystem_new::Generator* test_generator = lsystem_manager.get_generator(tg_id);
+
 	app::gui.show_lsystem_window = true;
 	app::gui.show_demo_window = true;
 
@@ -42,11 +68,14 @@ int main(int argc, char *argv[]) {
 			if (s == State::Error) { return 1; }
 		}
 
+		lsystem_new::update_generator(test_generator);
+
+
 		// panning must be changed so it doesnt redraw, it has to use pixels and scale
 		if (viewport::spec.panning_active) {
-			for (auto &[key, module] : lsystem_manager.modules) {
-				module->plant.needs_regen = true;
-			}
+			// for (auto &[key, module] : lsystem_manager.modules) {
+			// 	module->plant.needs_regen = true;
+			// }
 			// puts("pan active");
 		}
 
@@ -135,7 +164,7 @@ struct GuiModuleSpec {
 	bool wait_for_coordinates{false};
 };
 
-State update_gui(lsystem::LsystemManager& lsystem_manager) {
+State update_gui(lsystem_new::LsystemManager& lsystem_manager) {
   ImGui_ImplSDLRenderer3_NewFrame();
   ImGui_ImplSDL3_NewFrame();
   ImGui::NewFrame();
@@ -144,6 +173,30 @@ State update_gui(lsystem::LsystemManager& lsystem_manager) {
   if (app::gui.show_demo_window) {
     ImGui::ShowDemoWindow(&app::gui.show_demo_window);
   }
+  // ___LSYSTEM_MAIN___
+  static bool open = true;
+  bool *p_open = &open;
+  if (app::gui.show_lsystem_window) {
+
+    ImGui::SetNextWindowSize(ImVec2(500, 440), ImGuiCond_FirstUseEver);
+    if (ImGui::Begin("L-System", &app::gui.show_lsystem_window,
+                     ImGuiWindowFlags_MenuBar)) {
+
+    // ___MENU_BAR___
+      if (ImGui::BeginMenuBar()) {
+        if (ImGui::BeginMenu("File")) {
+          if (ImGui::MenuItem("Close", "Ctrl+W")) {
+            *p_open = false;
+          }
+          ImGui::EndMenu();
+        }
+        ImGui::EndMenuBar();
+      }
+
+			static char test_texfiled[1024];
+		}
+    ImGui::End();
+	}
 
   // ___LSYSTEM_MAIN___
   // static bool open = true;

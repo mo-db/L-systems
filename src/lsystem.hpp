@@ -115,6 +115,10 @@ struct GenerationManager {
 	char axiom[app::gui.textfield_size]{};
 	std::vector<Rule> rules;
 	inline void add_rule() { rules.push_back(Rule{}); }
+	inline void remove_rule() { 
+		if (rules.empty()) { return; }
+		rules.pop_back(); 
+	}
 };
 
 // ---- object for the whole lsystem data ----
@@ -200,4 +204,8 @@ State _turtle_action(Plant& plant, const char symbol, double x);
 // ---- plant ----
 State generate_plant_timed(Module* module);
 State draw_plant_timed(Module* module, draw::FrameBuf &fb);
+
+std::optional<int> 
+parse_symbol(const std::string lstring, const int index, char& symbol,
+             std::vector<double> &args);
 } //namespace lsystem

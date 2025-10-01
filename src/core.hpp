@@ -42,11 +42,13 @@
 #define print_info(msg) \
     std::cout << "INFO:" << __FILE__ << ":" << __LINE__ << ":" << __func__ << "(), " << msg << std::endl;
 
+// use with std::expected, fatal == terminate
 enum class Error {
 	Warning,
 	Fatal,
 };
 
+// use as return type, error == terminate
 enum class State {
   True,
   False,
@@ -108,7 +110,7 @@ inline bool equal_iepsilon(double x, double y) {
 inline std::string get_substr(const std::string &str, const int index, const char c) {
 	int field_start = index;
 	int field_end = str.find(c, index);
-	std::string substr = "";
+	std::string substr{};
 	if (field_end != std::string::npos) {
 		substr = str.substr(index, field_end - field_start);
 	}

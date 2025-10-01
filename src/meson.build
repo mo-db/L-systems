@@ -1,4 +1,4 @@
-sources = ['main.cc', 'app.cc', 'graphics.cc', 'rasterize.cc', 'lsystem.cc',
+sources = ['main.cc', 'app.cc', 'graphics.cc', 'rasterize.cc', 'lsystem_new.cc',
   'imgui_impl_sdlrenderer3.cpp', 'imgui_impl_sdl3.cpp']
 
 libs_header_only = include_directories('.', 'libs_header_only')

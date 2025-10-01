@@ -123,29 +123,72 @@ State _turtle_action(Plant& plant, const char symbol, double x) {
 }
 
 // this is no longer needed, this will now return a vector<double>
-std::vector<std::string> split_args(const std::string &args_string) {
-	if (args_string.empty()) { return std::vector<std::string>{}; }
+std::vector<std::string> split_arg_block(const std::string &arg_block) {
+	if (arg_block.empty()) { return std::vector<std::string>{}; }
+	if (arg_block.front() != '{') { return std::vector<std::string>{}; }
+	if (arg_block.back() != '}') { return std::vector<std::string>{}; }
 	std::vector<std::string> args{};
 	std::string current_string{};
-  for (int i = 0; i < args_string.size(); i++) {
-    if (args_string[i] == ';') {
+  for (int i = 1; i < arg_block.size() - 1; i++) {
+    if (arg_block[i] == ';') {
 			args.push_back(current_string);
 			current_string.clear();
     } else {
-			current_string += args_string[i];
+			current_string += arg_block[i];
 		}
   }
 	args.push_back(current_string);
   return args;
 }
 
-std::vector<double> get_args_values(const std::string args_string) {
+std::string get_arg_block(const std::string lstring, const int index) {
+	if (lstring.empty() || index >= lstring.size())  { return std::string{}; }
+	std::string arg_block{};
+	if (lstring[index] != '{') { return std::string{}; }
+	int new_index = index;
+	for (; lstring[new_index] != '}'; new_index++) {
+		if (new_index >= lstring.size()) { return std::string{}; }
+		arg_block += lstring[new_index];
+	}
+	arg_block += lstring[new_index];
+	return arg_block;
+}
+
+std::vector<double> parse_arg_block(const std::string arg_block) {
 	std::vector<double> args{};
-	std::vector<std::string> split_args_string = split_args(args_string);
-	for (int i = 0; i < split_args_string.size(); i++) {
-		args.push_back(std::atof(split_args_string[i].c_str()));
+	std::vector<std::string> string_args = split_arg_block(arg_block);
+	if (string_args.empty()) { return std::vector<double>{}; }
+
+	// if it fails it just fills 0, should do something else
+	for (int i = 0; i < string_args.size(); i++) {
+		char* end = nullptr;
+		double value = std::strtod(string_args[i].c_str(), &end);
+		if (end == string_args[i].c_str() || *end != '\0') {
+			return std::vector<double>{};
+		}
+		args.push_back(value);
 	}
 	return args;
+}
+
+std::optional<int> 
+parse_symbol(const std::string lstring, const int index, char& symbol,
+             std::vector<double> &args) {
+	if (lstring.empty() || index >= lstring.size())  { return std::nullopt; }
+
+	int local_index = index;
+	symbol = lstring[local_index++];
+	if (local_index >= lstring.size()) { return 0; }
+	if (lstring[local_index] != '{')  { return local_index; }
+
+	std::string arg_block = get_arg_block(lstring, local_index);
+	if (arg_block.empty()) { return std::nullopt; }
+
+	local_index += arg_block.size();
+	args = parse_arg_block(arg_block);
+	if (args.empty()) { return std::nullopt; }
+	
+	return local_index;
 }
 
 State generate_plant_timed(Module* module){
@@ -206,6 +249,7 @@ State draw_plant_timed(Module* module, draw::FrameBuf &fb) {
 
 std::string maybe_apply_rule(Module* module, const char symbol, std::vector<double> args) {
 	// CHANGE:
+	// use args.size()
 	std::unordered_map<std::string, double> local_variables { {"x", args[0]}, {"y", args[1]}, {"z", args[2]} };
 
 	// ---- try to match a rule ----
@@ -344,6 +388,10 @@ evaluate_production(std::unordered_map<std::string, double>& local_variables,
 	}
 }
 
+
+// function that takes {x,y,z} args and returns 3 strings
+// function that takes lstring example: A{x,y}-{x}[+A] 
+
 State generate_lstring_timed(Module* module) {
 	auto& iterations = module->generation_manager.iterations;
 	auto& current_iteration = module->generation_manager.current_iteration;
@@ -355,39 +403,60 @@ State generate_lstring_timed(Module* module) {
 	return State::True;
 }
 
-State _expand_lstring(Module* module) {
-	const std::string& lstring = module->lstring;
-	std::string& lstring_buffer = module->generation_manager.lstring_buffer;
-	int index = module->generation_manager.current_index;
 
-	while (index < lstring.size()) {
-		// ---- check time -> stop expansion  ----
-		util::ms elapsed = util::Clock::now() - app::context.frame_start;
-		if ((elapsed / app::context.frame_time) >= 0.6) {
-			module->generation_manager.current_index = index;
-			return State::False;
+State _expand_lstring(Module *module) {
+  const std::string &lstring = module->lstring;
+  std::string &lstring_buffer = module->generation_manager.lstring_buffer;
+  int index = module->generation_manager.current_index;
+
+  while (index < lstring.size()) {
+    // int parse_symbol(const std::string lstring, int index, std::string&
+    // symbol, std::vector<double>& args)
+    //
+    // ---- check time -> stop expansion  ----
+    util::ms elapsed = util::Clock::now() - app::context.frame_start;
+    if ((elapsed / app::context.frame_time) >= 0.6) {
+      module->generation_manager.current_index = index;
+      return State::False;
+    }
+
+
+		char symbol{};
+		std::vector<double> args{};
+		auto result = parse_symbol(lstring, index, symbol, args);
+		if (result == std::nullopt) { return State::Error; }
+		if (result.value() == 0) {
+			// symbol is last char
+      maybe_apply_rule(module, symbol, std::vector<double>{});
+			break;
 		}
+    maybe_apply_rule(module, symbol, args);
+		index = result.value();
 
-		// ---- expand one symbol ----
-		if (lstring[index] == '[' || lstring[index] == ']') {
-			lstring_buffer  += lstring[index++];
-		} else if (index + 1 >= lstring.size() || lstring[index + 1] != '{') { 
-			lstring_buffer  += maybe_apply_rule(module, lstring[index], std::vector<double>{});
-		} else if (lstring[index + 1] == '}') {
-			index += 2; // move to after '{'
-			std::string args_string = util::get_substr(lstring, index, '}');
-			if (args_string.empty()) { return State::Error; }
-			std::vector<double> args_values = get_args_values(args_string);
-			lstring_buffer  += maybe_apply_rule(module, lstring[index], args_values);
-			index += args_string.size() + 1; // move to after '}'
-		}
-		index++;
-	}
 
-	// ---- expansion completed ----
-	module->generation_manager.current_index = 0;
-	module->lstring = lstring_buffer;
-	lstring_buffer.clear();
-	return State::True;
+    // ---- expand one symbol ----
+    if (lstring[index] == '[' || lstring[index] == ']') {
+      lstring_buffer += lstring[index++];
+    } else if (index + 1 >= lstring.size() || lstring[index + 1] != '{') {
+      lstring_buffer +=
+          maybe_apply_rule(module, lstring[index], std::vector<double>{});
+    } else if (lstring[index + 1] == '}') {
+      index += 2; // move to after '{'
+      std::string args_string = util::get_substr(lstring, index, '}');
+      if (args_string.empty()) {
+        return State::Error;
+      }
+      std::vector<double> args_values = get_args_values(args_string);
+      lstring_buffer += maybe_apply_rule(module, lstring[index], args_values);
+      index += args_string.size() + 1; // move to after '}'
+    }
+    index++;
+  }
+
+  // ---- expansion completed ----
+  module->generation_manager.current_index = 0;
+  module->lstring = lstring_buffer;
+  lstring_buffer.clear();
+  return State::True;
 }
 } // lsystem_new
