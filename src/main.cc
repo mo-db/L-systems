@@ -41,7 +41,7 @@ State test_parse_symbol(const std::string& lstring) {
 int main(int argc, char *argv[]) {
 	try {
 		app::init(960, 540);
-		app::context.logger->set_log_level(quill::LogLevel::TraceL3);
+		app::context.logger->set_log_level(quill::LogLevel::Error);
 
 		draw::FrameBuf fb_main{app::video.window_texture_pixels,
 													 app::video.width, app::video.height};
@@ -95,7 +95,11 @@ int main(int argc, char *argv[]) {
 			// }
 		}
 	} catch (const std::runtime_error& e) {
-		fmt::print("error: {}\n", e.what());
+		LOG_CRITICAL(app::context.logger, "RuntimeError: {}", e.what());
+		cleanup();
+		return 1;
+	} catch (const std::logic_error& e) {
+		LOG_CRITICAL(app::context.logger, "LogicError: {}", e.what());
 		cleanup();
 		return 1;
 	}

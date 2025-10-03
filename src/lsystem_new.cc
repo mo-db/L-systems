@@ -58,8 +58,7 @@ evaluate_expression(std::unordered_map<std::string, double>& local_variables,
   expression.register_symbol_table(symbol_table);
   parser_t parser;
   if (!parser.compile(expression_string, expression)) {
-		return std::unexpected(Error{
-				fmt::format("faild to evaluate expression: {}", expression_string)});
+		return std::unexpected(Error::Syntax);
   }
   return (T)expression.value();
 }
@@ -78,8 +77,7 @@ evaluate_production(std::unordered_map<std::string, double>& local_variables,
 		if (production[index] == '{') {
 			auto result_1 = get_arg_block(production, index);
 			if (!result_1) { 
-				return std::unexpected(Error{
-				fmt::format("{}:{}", __func__, result_1.error().message)});
+				return std::unexpected(result_1.error());
 			}
 			std::string arg_block = result_1.value();
 
@@ -113,7 +111,8 @@ evaluate_production(std::unordered_map<std::string, double>& local_variables,
 std::expected<std::vector<std::string>, Error>
 split_arg_block(const std::string &arg_block) {
 	if (arg_block.empty() || arg_block.front() != '{' || arg_block.back() != '}') {
-		return std::unexpected(Error{error_msg("arg_block invalid")}); 
+		LOG_ERROR(app::context.logger, "arg_block invalid: {}", arg_block);
+		return std::unexpected(Error::InvalidArgument); 
 	}
 	std::vector<std::string> args{};
 	std::string current_string{};
@@ -134,14 +133,16 @@ split_arg_block(const std::string &arg_block) {
 std::expected<std::string, Error>
 get_arg_block(const std::string lstring, const int index) {
 	if (lstring.empty() || index >= lstring.size() || lstring[index] != '{')  {
-		return std::unexpected(Error{error_msg("lstring or index invalid")});
+		LOG_ERROR(app::context.logger, "invalid arguments");
+		return std::unexpected(Error::InvalidArgument);
 	}
 
 	std::string arg_block{};
 	int new_index = index;
 	for (; lstring[new_index] != '}'; new_index++) {
 		if (new_index >= lstring.size()) { 
-			return std::unexpected(Error{error_msg("arg-block does not end")});
+			LOG_ERROR(app::context.logger, "'}' not found");
+			return std::unexpected(Error::NotFound);
 		}
 		arg_block += lstring[new_index];
 	}
@@ -155,7 +156,7 @@ get_arg_block(const std::string lstring, const int index) {
 std::expected<std::vector<double>, Error>
 parse_arg_block(const std::string arg_block) {
 	auto result = split_arg_block(arg_block);
-	if (!result) { return std::unexpected(Error{error_msg("split failed")}); }
+	if (!result) { return std::unexpected(result.error()); }
 	std::vector<std::string> string_args = result.value();
 
 	std::vector<double> args{};
@@ -163,7 +164,8 @@ parse_arg_block(const std::string arg_block) {
 		char* end = nullptr;
 		double value = std::strtod(string_args[i].c_str(), &end);
 		if (end == string_args[i].c_str() || *end != '\0') {
-			return std::unexpected(Error{error_msg("conversion failed")});
+			LOG_ERROR(app::context.logger, "strtod conversion error");
+			return std::unexpected(Error::Syntax);
 		}
 		args.push_back(value);
 	}
@@ -176,16 +178,14 @@ evaluate_arg_block(std::unordered_map<std::string, double>& local_variables,
                     const std::string& arg_block) {
 	std::vector<double> args{};
 	auto result = split_arg_block(arg_block);
-	if (!result) { return std::unexpected(Error{error_msg("split failed")}); }
+	if (!result) { return std::unexpected(result.error()); }
 	std::vector<std::string> string_args = result.value();
 
 	for (int i = 0; i < string_args.size(); i++) {
 		auto result = evaluate_expression(local_variables, global_variables, string_args[i]);
 		if (!result) {
-			// what is better?
-			return std::unexpected(Error{error_msg("evaluation failed")});
-			return std::unexpected(result.error()); 
-			// return eval_error
+			LOG_WARNING(app::context.logger, "arg_block evaluation failed");
+			return std::unexpected(result.error());
 		}
 		double value = result.value();
 		args.push_back(value);
@@ -228,8 +228,11 @@ std::unordered_map<std::string, double> args_to_map(std::vector<double> args) {
 }
 
 std::expected<std::string, Error>
-maybe_apply_rule(Generator* generator, const char symbol, std::vector<double> args) {
-	std::unordered_map<std::string, double> local_variables = args_to_map(args);
+maybe_apply_rule(Generator* generator, const char symbol, std::string arg_block) {
+	auto args = parse_arg_block(arg_block);
+	if (!args) { return std::unexpected(args.error()); }
+
+	std::unordered_map<std::string, double> local_variables = args_to_map(args.value());
 
 	// ---- try to match a rule ----
 	for (auto &production : generator->productions) {
@@ -241,8 +244,8 @@ maybe_apply_rule(Generator* generator, const char symbol, std::vector<double> ar
 		if (!condition.empty()) {
 			auto result = evaluate_expression(local_variables, generator->global_variables, condition);
 			if (!result) {
-			// TODO: draw rule text in red
-				print_info("");
+				LOG_WARNING(app::context.logger, "condition evaluation failed");
+				// TODO: draw rule text in red
 				continue;
 			}
 			if (result.value() == false) {
@@ -252,115 +255,116 @@ maybe_apply_rule(Generator* generator, const char symbol, std::vector<double> ar
 
 		// ---- rule matched -> replace symbol with rule ----
 		auto result = evaluate_production(local_variables, generator->global_variables, rule);
-		if (!result) { return fmt::format("{}", symbol); }
+		if (!result) { return std::unexpected(result.error()); }
 		return result.value();
 	}
+	if (arg_block.empty()) {
+		return fmt::format("{}", symbol);
+	} else {
+		return fmt::format("{}{}", symbol, arg_block);
+	}
+	// return fmt::format("
 }
 
-State reset_generator(Generator* generator) {
+
+std::expected<void, Error>
+reset_generator(Generator* generator) {
 	generator->lstring.clear();
 	generator->current_iteration = 0;
 	std::string axiom = generator->axiom;
 	std::unordered_map<std::string, double> local_variables{};
+
 	auto result = evaluate_production(local_variables, generator->global_variables, axiom);
 	if (!result) {
-		// TODO: draw gui text red
-		print_info("Axiom could not be evaluated\n");
-		return State::False;
+		// TODO mark axiom red
+		return std::unexpected(result.error());
 	}
+
 	generator->lstring = result.value();
 	generator->current_iteration++;
-	return State::True;
-}
-
-State generate_timed(Generator* generator) {
-	auto& iterations = generator->iterations;
-	auto& current_iteration = generator->current_iteration;
-	for (int i = current_iteration; i < iterations; i++) {
-		State state = _expand_lstring(generator);
-		if (state == State::Error || state == State::False) { return state; }
-		current_iteration++;
-	}
-	return State::True;
-}
-
-std::expected<void, Error>
-test_func(int i) {
-
-	LOG_INFO(app::context.logger, "Hello from {}!", std::string_view{"Quill"});
-	// spdlog::get("logger")->info("this is i: {}", i);
-	// if (i > 5) { return std::unexpected(Error{}); }
-	// if (i == 5) { throw std::runtime_error("fatal error in test func"); }
 	return {};
 }
 
 
-State _expand_lstring(Generator* generator) {
+std::expected<bool, Error>
+generate_timed(Generator* generator) {
+	auto& iterations = generator->iterations;
+	auto& current_iteration = generator->current_iteration;
+	for (;current_iteration < iterations; current_iteration++) {
+		auto result = _expand_lstring(generator);
+		if (!result) { return std::unexpected(result.error()); }
+		if (!result.value()) { return false; }
+	}
+	return true;
+}
+
+
+std::expected<bool, Error>
+_expand_lstring(Generator* generator) {
 	int index = generator->current_index;
 	std::string& lstring = generator->lstring;
+
+
+	char symbol{};
   while (index < lstring.size()) {
 
     // ---- check time ----
     util::ms elapsed = util::Clock::now() - app::context.frame_start;
     if ((elapsed / app::context.frame_time) >= 0.6) {
       generator->current_index = index;
-      return State::False;
+      return false;
     }
 
-		// TODO check symbol
-		// char symbol = lstring[index];
-		//
-		// if (index + 1 >= lstring.size()) {
-		//     auto result = maybe_apply_rule(generator, symbol, std::vector<double>{});
-		// 	if (!result) {}
-		// 	break;
-		// }
-		//
-		// index++;
-		// if (index == '{') {
-		// } else {
-		//     auto result = maybe_apply_rule(generator, symbol, std::vector<double>{});
-		// }
+		if (lstring[index] == '{') {
+			if (symbol == 0) { throw std::logic_error("symbol invalid"); }
+			auto arg_block = get_arg_block(lstring, index);
+			if (!arg_block) { return std::unexpected(arg_block.error()); }
 
+			auto result = maybe_apply_rule(generator, symbol, arg_block.value());
+			if (!result) { return std::unexpected(result.error()); }
+			generator->lstring_buffer += result.value();
 
-
-
-		char symbol{};
-		std::vector<double> args{};
-		auto result = parse_symbol(generator->lstring, index, symbol, args);
-		if (result == std::nullopt) {
-			return State::Error; 
+			index += arg_block.value().size();
+		} else if (lstring[index] == ' ') {
+			continue;
+		} else {
+			if (symbol == 0) {
+				 symbol = lstring[index++];
+				 continue;
+			} else {
+				auto result = maybe_apply_rule(generator, symbol, std::string{});
+				if (!result) { return std::unexpected(result.error()); }
+				generator->lstring_buffer += result.value();
+				symbol = 0;
+			}
 		}
-		if (result.value() == 0) { // 0 means last char
-      maybe_apply_rule(generator, symbol, std::vector<double>{});
-			break;
-		}
-    maybe_apply_rule(generator, symbol, args);
-		index = result.value();
   }
 
   // ---- expansion completed ----
   generator->current_index = 0;
   generator->lstring = generator->lstring_buffer;
   generator->lstring_buffer.clear();
-  return State::True;
+  return true;
 }
 
-State update_generator(Generator* generator) {
+
+std::expected<void, Error>
+update_generator(Generator* generator) {
 
 	// if reset is needed, reset, then return, not timed,  never takes that long
 	if (generator->reset_needed == true) {
 		generator->reset_needed = false;
-		State state = reset_generator(generator);
-		return state;
+		auto result = reset_generator(generator);
+		if (!result) { return std::unexpected(result.error()); }
+		return {};
 	}
 
-	{
-		// gets most of frametime
-		State state = generate_timed(generator);
-		if (state == State::Error || state == State::False) { return state; }
+	auto result = generate_timed(generator);
+	if (!result) { return std::unexpected(result.error()); }
+	if (result.value() == true) {
+		// TODO: probably move, and put generator id in here
+		LOG_INFO(app::context.logger, "generation finished");
 	}
-
-	return State::True;
+	return {};
 }
 } // namespace lsystem_new

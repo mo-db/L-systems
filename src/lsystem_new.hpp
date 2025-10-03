@@ -1,4 +1,4 @@
-// lsystem.hpp
+// lsystem_new.hpp
 #pragma once
 #include "core.hpp"
 #include "app.hpp"
@@ -6,7 +6,6 @@
 #include "rasterize.hpp"
 
 namespace lsystem_new {
-
 constexpr int textfield_size = 4096;
 
 enum class SymbolIdentifier : size_t {
@@ -222,16 +221,16 @@ args_to_map(std::vector<double> args);
 std::expected<std::string, Error>
 maybe_apply_rule(Generator* generator, const char symbol, std::vector<double> args);
 
-State
+std::expected<void, Error>
 reset_generator(Generator* generator);
 
-State
+std::expected<bool, Error>
 generate_timed(Generator* generator);
 
-State
+std::expected<bool, Error>
 _expand_lstring(Generator* generator);
 
-State
+std::expected<void, Error>
 update_generator(Generator* generator);
 
 std::expected<void, Error>

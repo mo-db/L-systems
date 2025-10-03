@@ -55,18 +55,29 @@
 #define print_info(msg) \
 	fmt::print("INFO {}:{}:{}():\n\t-> {}\n", __FILE__, __LINE__, __func__, msg)
 
-enum class ErrorFlag {
-	Generic,
+
+enum class Error {
+    Generic,
+		Logic,
+    InvalidArgument,
+    OutOfRange,
+    NotFound,
+		Syntax,
+		Semantic,
 };
-struct Error {
-	ErrorFlag flag{ErrorFlag::Generic};
-	std::string message{};
-	Error() = default;
-	Error(const std::string message_) : message(message_) {}
-	Error(const ErrorFlag flag_) : flag(flag_) {}
-	Error(const ErrorFlag flag_, const std::string message_) 
-		: flag(flag_), message(message_) {}
-};
+
+inline const char* to_string(Error error) noexcept {
+    switch (error) {
+    case Error::Generic: return "Generic";
+    case Error::Logic: return "Logic";
+    case Error::InvalidArgument: return "InvalidArgument";
+    case Error::OutOfRange: return "OutOfRange";
+    case Error::NotFound: return "NotFound";
+    case Error::Syntax: return "Semantic";
+    case Error::Semantic: return "Syntax";
+    }
+    return "Unknown";
+}
 
 // use as return type, error == terminate
 enum class State {
