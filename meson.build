@@ -5,8 +5,10 @@ project('lsys', 'c', 'cpp',
 sdl3_dep = dependency('sdl3')
 sdl3_image_dep = dependency('sdl3_image')
 fmt_dep = dependency('fmt')
+quill_dep = dependency('quill')
 # ask for imgui, but fall back to subproject (subprojects/imgui/meson.build)
 imgui_dep = dependency('imgui', fallback: ['imgui-1.92.3', 'imgui_dep'])
 
 # subdir('legacy_src')
 subdir('src')
+subdir('test')

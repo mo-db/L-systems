@@ -4,4 +4,4 @@ sources = ['main.cc', 'app.cc', 'graphics.cc', 'rasterize.cc', 'lsystem_new.cc',
 libs_header_only = include_directories('.', 'libs_header_only')
 
 executable('app', sources, include_directories : libs_header_only, 
-          dependencies: [sdl3_dep, sdl3_image_dep, fmt_dep, imgui_dep])
+          dependencies: [sdl3_dep, sdl3_image_dep, quill_dep, fmt_dep, imgui_dep])

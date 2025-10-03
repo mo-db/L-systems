@@ -48,6 +48,7 @@ struct Context {
 	std::string render_path = "";
 	std::vector<Statequeue> state_queue_manager{};
 	std::vector<InputStatequeue> input_statequeue_manager{};
+	quill::Logger* logger{};
 };
 
 struct Video {
@@ -75,7 +76,8 @@ struct Gui {
 	ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 	// windows
 	bool show_demo_window = false;
-	bool show_lsystem_window = false;
+	bool show_generator_window = false;
+	bool show_builder_window = false;
 };
 
 struct Input {

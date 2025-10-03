@@ -55,6 +55,27 @@ void init(int width, int height) {
 	// Setup Platform/Renderer backends
 	ImGui_ImplSDL3_InitForSDLRenderer(app::video.window, app::video.renderer);
 	ImGui_ImplSDLRenderer3_Init(app::video.renderer);
+
+	// ---- logging ----
+	quill::Backend::start();
+
+	// File Sink
+	// auto file_sink = quill::Frontend::create_or_get_sink<quill::FileSink>(
+	// "trivial_logging.log",
+	// []()
+	// {
+	// 	quill::FileSinkConfig cfg;
+	// 	cfg.set_open_mode('w');
+	// 	cfg.set_filename_append_option(quill::FilenameAppendOption::StartDateTime);
+	// 	return cfg;
+	// }(),
+	// quill::FileEventNotifier{});
+	// app::context.logger = quill::Frontend::create_or_get_logger("root", std::move(file_sink));
+	
+	// Console Sink
+	app::context.logger = quill::Frontend::create_or_get_logger(
+		"root", quill::Frontend::create_or_get_sink<quill::ConsoleSink>("sink_id_1"));
+	
 }
 
 void update_state_queues() {

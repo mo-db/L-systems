@@ -38,13 +38,6 @@
 #include "imgui_impl_sdlrenderer3.h"
 #include "imgui_impl_sdl3.h"
 
-#include "quill/Backend.h"
-#include "quill/Frontend.h"
-#include "quill/LogMacros.h"
-#include "quill/Logger.h"
-#include "quill/sinks/ConsoleSink.h"
-#include "quill/sinks/FileSink.h"
-#include <string_view>
 
 #define error_msg(msg) \
 	fmt::format("ERROR in {}() -> {}", __func__, msg)
@@ -53,21 +46,20 @@
 	fmt::format("CRASH at {}:{} in {}():\n\t-> {}\n", __FILE__, __LINE__, __func__, msg)
 
 #define print_info(msg) \
-	fmt::print("INFO {}:{}:{}():\n\t-> {}\n", __FILE__, __LINE__, __func__, msg)
+	fmt::print("INFO {}:{}:{}():\n\t-> {}\n", __FILE__, __LINE__, __func__, msg);
 
 enum class ErrorFlag {
 	Generic,
 };
 struct Error {
 	ErrorFlag flag{ErrorFlag::Generic};
-	std::string message{};
+	std::string message{"ERROR"};
 	Error() = default;
 	Error(const std::string message_) : message(message_) {}
 	Error(const ErrorFlag flag_) : flag(flag_) {}
 	Error(const ErrorFlag flag_, const std::string message_) 
 		: flag(flag_), message(message_) {}
 };
-
 // use as return type, error == terminate
 enum class State {
   True,

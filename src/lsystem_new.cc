@@ -36,7 +36,7 @@ std::optional<SymbolCategory> get_symbol_category(const char ch) {
 // CHANGE: dont pass variables by reference???
 // 1. have global symbol storage per module -> global vars, constants like pi, e etc...
 // 2. pass local variables, per value not per reference
-std::optional<double>
+std::expected<double, Error>
 evaluate_expression(std::unordered_map<std::string, double>& local_variables,
 										std::unordered_map<std::string, double>& global_variables,
                     const std::string& expression_string) {
@@ -58,16 +58,15 @@ evaluate_expression(std::unordered_map<std::string, double>& local_variables,
   expression.register_symbol_table(symbol_table);
   parser_t parser;
   if (!parser.compile(expression_string, expression)) {
-    print_info("Could not evaluate expression");
-    fmt::print("expression: {}\n", expression_string);
-    return {};
+		return std::unexpected(Error{
+				fmt::format("faild to evaluate expression: {}", expression_string)});
   }
   return (T)expression.value();
 }
 
 // return nullopt if eval failed
 // CHANGE: maybe make a function: parse_braced_args()
-std::optional<std::string>
+std::expected<std::string, Error>
 evaluate_production(std::unordered_map<std::string, double>& local_variables,
 										std::unordered_map<std::string, double>& global_variables,
                     const std::string& production) {
@@ -77,19 +76,21 @@ evaluate_production(std::unordered_map<std::string, double>& local_variables,
 	while (index < production.size()) {
 
 		if (production[index] == '{') {
-			std::string arg_block = get_arg_block(production, index);
-			if (arg_block.empty()) { 
-				print_info("Arg block empty");
-				return std::nullopt; 
+			auto result_1 = get_arg_block(production, index);
+			if (!result_1) { 
+				return std::unexpected(Error{
+				fmt::format("{}:{}", __func__, result_1.error().message)});
 			}
+			std::string arg_block = result_1.value();
+
 			index += arg_block.size();
 
-			std::vector<double> args =
+			auto result_2 =
 				evaluate_arg_block(local_variables, global_variables, arg_block);
-			if (args.empty()) { 
-				print_info("Args could not be parsed");
-				return std::nullopt;
+			if (!result_2) { 
+				return std::unexpected(result_2.error()); 
 			}
+			std::vector<double> args = result_2.value();
 
 			evaluated_production += '{';
 			for (int i = 0; i < args.size(); i++) {
@@ -105,12 +106,15 @@ evaluate_production(std::unordered_map<std::string, double>& local_variables,
 			evaluated_production += production[index++];
 		}
 	}
+	return evaluated_production;
 }
 
-std::vector<std::string> split_arg_block(const std::string &arg_block) {
-	if (arg_block.empty()) { return std::vector<std::string>{}; }
-	if (arg_block.front() != '{') { return std::vector<std::string>{}; }
-	if (arg_block.back() != '}') { return std::vector<std::string>{}; }
+
+std::expected<std::vector<std::string>, Error>
+split_arg_block(const std::string &arg_block) {
+	if (arg_block.empty() || arg_block.front() != '{' || arg_block.back() != '}') {
+		return std::unexpected(Error{error_msg("arg_block invalid")}); 
+	}
 	std::vector<std::string> args{};
 	std::string current_string{};
   for (int i = 1; i < arg_block.size() - 1; i++) {
@@ -122,54 +126,69 @@ std::vector<std::string> split_arg_block(const std::string &arg_block) {
 		}
   }
 	args.push_back(current_string);
+
   return args;
 }
 
-std::string get_arg_block(const std::string lstring, const int index) {
-	if (lstring.empty() || index >= lstring.size())  { return std::string{}; }
+
+std::expected<std::string, Error>
+get_arg_block(const std::string lstring, const int index) {
+	if (lstring.empty() || index >= lstring.size() || lstring[index] != '{')  {
+		return std::unexpected(Error{error_msg("lstring or index invalid")});
+	}
+
 	std::string arg_block{};
-	if (lstring[index] != '{') { return std::string{}; }
 	int new_index = index;
 	for (; lstring[new_index] != '}'; new_index++) {
-		if (new_index >= lstring.size()) { return std::string{}; }
+		if (new_index >= lstring.size()) { 
+			return std::unexpected(Error{error_msg("arg-block does not end")});
+		}
 		arg_block += lstring[new_index];
 	}
 	arg_block += lstring[new_index];
+
+	util::trim(arg_block);
 	return arg_block;
 }
 
-std::vector<double> parse_arg_block(const std::string arg_block) {
-	std::vector<double> args{};
-	std::vector<std::string> string_args = split_arg_block(arg_block);
-	if (string_args.empty()) { return std::vector<double>{}; }
 
-	// if it fails it just fills 0, should do something else
+std::expected<std::vector<double>, Error>
+parse_arg_block(const std::string arg_block) {
+	auto result = split_arg_block(arg_block);
+	if (!result) { return std::unexpected(Error{error_msg("split failed")}); }
+	std::vector<std::string> string_args = result.value();
+
+	std::vector<double> args{};
 	for (int i = 0; i < string_args.size(); i++) {
 		char* end = nullptr;
 		double value = std::strtod(string_args[i].c_str(), &end);
 		if (end == string_args[i].c_str() || *end != '\0') {
-			print_info("could not parse arg");
-			return std::vector<double>{};
+			return std::unexpected(Error{error_msg("conversion failed")});
 		}
 		args.push_back(value);
 	}
 	return args;
 }
 
-std::vector<double>
+std::expected<std::vector<double>, Error>
 evaluate_arg_block(std::unordered_map<std::string, double>& local_variables,
 										std::unordered_map<std::string, double>& global_variables,
                     const std::string& arg_block) {
 	std::vector<double> args{};
-	std::vector<std::string> string_args = split_arg_block(arg_block);
-	if (string_args.empty()) { return std::vector<double>{}; }
+	auto result = split_arg_block(arg_block);
+	if (!result) { return std::unexpected(Error{error_msg("split failed")}); }
+	std::vector<std::string> string_args = result.value();
+
 	for (int i = 0; i < string_args.size(); i++) {
 		auto result = evaluate_expression(local_variables, global_variables, string_args[i]);
-		if (result == std::nullopt) {
-			print_info("could not evaluate arg");
-			return std::vector<double>{}; 
+		if (!result) {
+			// what is better?
+			return std::unexpected(Error{error_msg("evaluation failed")});
+			return std::unexpected(result.error()); 
+			// return eval_error
 		}
-		args.push_back(result.value());
+		double value = result.value();
+		args.push_back(value);
 	}
 	return args;
 }
@@ -184,18 +203,18 @@ parse_symbol(const std::string lstring, const int index, char& symbol,
 	if (local_index >= lstring.size()) { return 0; }
 	if (lstring[local_index] != '{')  { return local_index; }
 
-	std::string arg_block = get_arg_block(lstring, local_index);
-	if (arg_block.empty()) { 
-		print_info("Arg block empty");
-		return std::nullopt; 
-	}
-
-	local_index += arg_block.size();
-	args = parse_arg_block(arg_block);
-	if (args.empty()) { 
-		print_info("Args could not be parsed");
-		return std::nullopt;
-	}
+	// std::string arg_block = get_arg_block(lstring, local_index);
+	// if (arg_block.empty()) { 
+	// 	print_info("Arg block empty");
+	// 	return std::nullopt; 
+	// }
+	//
+	// local_index += arg_block.size();
+	// args = parse_arg_block(arg_block);
+	// if (args.empty()) { 
+	// 	print_info("Args could not be parsed");
+	// 	return std::nullopt;
+	// }
 	
 	return local_index;
 }
@@ -208,7 +227,8 @@ std::unordered_map<std::string, double> args_to_map(std::vector<double> args) {
 	return args_map;
 }
 
-std::string maybe_apply_rule(Generator* generator, const char symbol, std::vector<double> args) {
+std::expected<std::string, Error>
+maybe_apply_rule(Generator* generator, const char symbol, std::vector<double> args) {
 	std::unordered_map<std::string, double> local_variables = args_to_map(args);
 
 	// ---- try to match a rule ----
@@ -232,7 +252,7 @@ std::string maybe_apply_rule(Generator* generator, const char symbol, std::vecto
 
 		// ---- rule matched -> replace symbol with rule ----
 		auto result = evaluate_production(local_variables, generator->global_variables, rule);
-		if (result == std::nullopt) { return fmt::format("{}", symbol); }
+		if (!result) { return fmt::format("{}", symbol); }
 		return result.value();
 	}
 }
@@ -243,7 +263,7 @@ State reset_generator(Generator* generator) {
 	std::string axiom = generator->axiom;
 	std::unordered_map<std::string, double> local_variables{};
 	auto result = evaluate_production(local_variables, generator->global_variables, axiom);
-	if (result == std::nullopt) {
+	if (!result) {
 		// TODO: draw gui text red
 		print_info("Axiom could not be evaluated\n");
 		return State::False;
@@ -264,10 +284,21 @@ State generate_timed(Generator* generator) {
 	return State::True;
 }
 
+std::expected<void, Error>
+test_func(int i) {
+
+	LOG_INFO(app::context.logger, "Hello from {}!", std::string_view{"Quill"});
+	// spdlog::get("logger")->info("this is i: {}", i);
+	// if (i > 5) { return std::unexpected(Error{}); }
+	// if (i == 5) { throw std::runtime_error("fatal error in test func"); }
+	return {};
+}
+
 
 State _expand_lstring(Generator* generator) {
 	int index = generator->current_index;
-  while (index < generator->lstring.size()) {
+	std::string& lstring = generator->lstring;
+  while (index < lstring.size()) {
 
     // ---- check time ----
     util::ms elapsed = util::Clock::now() - app::context.frame_start;
@@ -275,6 +306,24 @@ State _expand_lstring(Generator* generator) {
       generator->current_index = index;
       return State::False;
     }
+
+		// TODO check symbol
+		// char symbol = lstring[index];
+		//
+		// if (index + 1 >= lstring.size()) {
+		//     auto result = maybe_apply_rule(generator, symbol, std::vector<double>{});
+		// 	if (!result) {}
+		// 	break;
+		// }
+		//
+		// index++;
+		// if (index == '{') {
+		// } else {
+		//     auto result = maybe_apply_rule(generator, symbol, std::vector<double>{});
+		// }
+
+
+
 
 		char symbol{};
 		std::vector<double> args{};

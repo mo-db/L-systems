@@ -161,9 +161,7 @@ struct Generator {
   State update_vars();
 };
 
-class LsystemManager {
-	int id_counter{};
-public:
+struct LsystemManager {
 	std::unordered_map<int, std::unique_ptr<Generator>> generators;
 	std::vector<std::string*> lstrings;
 	Generator* get_generator(int id) {
@@ -172,9 +170,8 @@ public:
 		}
 		return generators[id].get();
 	}
-	int add_generator() {
-		generators.emplace(id_counter++, std::make_unique<Generator>());
-		return id_counter - 1;
+	void add_generator(const int id) {
+		generators.emplace(id, std::make_unique<Generator>());
 	}
 	State remove_generator(int id) {
 		Generator* generator = get_generator(id);
@@ -190,26 +187,27 @@ public:
 std::optional<SymbolCategory> 
 get_symbol_category(const char ch);
 
-std::optional<double>
+std::expected<double, Error>
 evaluate_expression(std::unordered_map<std::string, double>& local_variables,
                     std::unordered_map<std::string, double>& global_variables,
                     const std::string& expression_string);
 
-std::optional<std::string>
+std::expected<std::string, Error>
 evaluate_production(std::unordered_map<std::string, double>& local_variables,
                     std::unordered_map<std::string, double>& global_variables,
                     const std::string& production);
 
-std::vector<std::string> 
+std::expected<std::vector<std::string>, Error>
 split_arg_block(const std::string &arg_block);
 
-std::string
+// return substring arg block including '}', index must be set to '{'
+std::expected<std::string, Error>
 get_arg_block(const std::string lstring, const int index);
 
-std::vector<double>
+std::expected<std::vector<double>, Error>
 parse_arg_block(const std::string arg_block);
 
-std::vector<double>
+std::expected<std::vector<double>, Error>
 evaluate_arg_block(std::unordered_map<std::string, double>& local_variables,
                    std::unordered_map<std::string, double>& global_variables,
                    const std::string& arg_block);
@@ -221,7 +219,7 @@ parse_symbol(const std::string lstring, const int index, char& symbol,
 std::unordered_map<std::string, double>
 args_to_map(std::vector<double> args);
 
-std::string
+std::expected<std::string, Error>
 maybe_apply_rule(Generator* generator, const char symbol, std::vector<double> args);
 
 State
@@ -235,5 +233,8 @@ _expand_lstring(Generator* generator);
 
 State
 update_generator(Generator* generator);
+
+std::expected<void, Error>
+test_func(int i);
 
 } // namespace lsystem_new
