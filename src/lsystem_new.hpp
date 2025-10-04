@@ -212,7 +212,8 @@ evaluate_expression(std::unordered_map<std::string, double>& local_variables,
                     const std::string& expression_string);
 
 std::expected<std::string, Error>
-evaluate_production(std::unordered_map<std::string, double>& local_variables,
+evaluate_production(std::unordered_map<SymbolCategory, double>& symbol_defaults,
+		 								std::unordered_map<std::string, double>& local_variables,
                     std::unordered_map<std::string, double>& global_variables,
                     const std::string& production);
 

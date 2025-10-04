@@ -11,6 +11,8 @@ std::optional<SymbolCategory> get_symbol_category(const char ch) {
 	if (ch == '^' || ch == '&') {
 		return SymbolCategory::Width;
 	}
+
+	LOG_ERROR(app::context.logger, "invalid symobl: {}", ch);
 	return std::nullopt;
 }
 
@@ -66,47 +68,63 @@ evaluate_expression(std::unordered_map<std::string, double>& local_variables,
 // return nullopt if eval failed
 // CHANGE: maybe make a function: parse_braced_args()
 std::expected<std::string, Error>
-evaluate_production(std::unordered_map<std::string, double>& local_variables,
-										std::unordered_map<std::string, double>& global_variables,
-                    const std::string& production) {
-	std::string evaluated_production{};
-	std::string expression{};
-	int index = 0;
-	while (index < production.size()) {
+evaluate_production(std::unordered_map<SymbolCategory, double>& symbol_defaults,
+                    std::unordered_map<std::string, double> &local_variables,
+                    std::unordered_map<std::string, double> &global_variables,
+                    const std::string &production) {
+  std::string evaluated_production{};
+  int index = 0;
 
-		if (production[index] == '{') {
-			auto result_1 = get_arg_block(production, index);
-			if (!result_1) { 
-				return std::unexpected(result_1.error());
-			}
-			std::string arg_block = result_1.value();
+  while (index < production.size()) {
+    char symbol = production[index++];
+    evaluated_production += symbol;
 
-			index += arg_block.size();
+		if (symbol == '[' || symbol == ']') { continue; }
+		if (symbol == ' ') { continue; }
 
-			auto result_2 =
-				evaluate_arg_block(local_variables, global_variables, arg_block);
-			if (!result_2) { 
-				return std::unexpected(result_2.error()); 
-			}
-			std::vector<double> args = result_2.value();
-
-			evaluated_production += '{';
-			for (int i = 0; i < args.size(); i++) {
-				if (i + 1 < args.size()) {
-					evaluated_production += fmt::format("{};", args[i]);
-				} else {
-					evaluated_production += fmt::format("{}", args[i]);
-				}
-			}
-			evaluated_production += '}';
-
-		} else {
-			evaluated_production += production[index++];
+		auto symbol_category = get_symbol_category(symbol);
+		if (!symbol_category) { 
+			LOG_ERROR(app::context.logger, "invalid symbol");
+			return std::unexpected(Error::InvalidArgument);
 		}
-	}
-	return evaluated_production;
-}
+		double symbol_default = symbol_defaults[symbol_category.value()];
 
+    if (index < production.size()) {
+      if (production[index] == '{') {
+        auto arg_block = get_arg_block(production, index);
+        if (!arg_block) {
+          return std::unexpected(arg_block.error());
+        }
+
+        auto result_2 = evaluate_arg_block(local_variables, global_variables,
+                                           arg_block.value());
+        if (!result_2) {
+          return std::unexpected(result_2.error());
+        }
+
+        std::vector<double> args = result_2.value();
+        evaluated_production += "{";
+        for (int i = 0; i < args.size(); i++) {
+          if (i + 1 < args.size()) {
+            evaluated_production += fmt::format("{};", args[i]);
+          } else {
+            evaluated_production += fmt::format("{}", args[i]);
+          }
+        }
+        evaluated_production += "}";
+
+        index += arg_block.value().size();
+      } else {
+        evaluated_production += fmt::format("{}{}{}", '{', symbol_default, '}');
+      }
+    } else {
+      evaluated_production += fmt::format("{}{}{}", '{', symbol_default, '}');
+      break;
+    }
+  }
+	fmt::print("evalprod: {}\n", evaluated_production);
+  return evaluated_production;
+}
 
 std::expected<std::vector<std::string>, Error>
 split_arg_block(const std::string &arg_block) {
@@ -268,7 +286,8 @@ maybe_apply_rule(Generator* generator, const char symbol, std::string arg_block)
 		LOG_INFO(app::context.logger, "condition match");
 
 		// ---- rule matched -> replace symbol with rule ----
-		auto result = evaluate_production(local_variables, generator->global_variables, rule);
+		auto result = evaluate_production(generator->symbol_defaults, 
+				local_variables, generator->global_variables, rule);
 		if (!result) { return std::unexpected(result.error()); }
 		return result.value();
 	}
@@ -288,7 +307,8 @@ reset_generator(Generator* generator) {
 	std::string axiom = generator->axiom;
 	std::unordered_map<std::string, double> local_variables{};
 
-	auto result = evaluate_production(local_variables, generator->global_variables, axiom);
+	auto result = evaluate_production(generator->symbol_defaults,
+			local_variables, generator->global_variables, axiom);
 	if (!result) {
 		// TODO mark axiom red
 		return std::unexpected(result.error());
