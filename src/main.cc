@@ -41,7 +41,7 @@ State test_parse_symbol(const std::string& lstring) {
 int main(int argc, char *argv[]) {
 	try {
 		app::init(960, 540);
-		app::context.logger->set_log_level(quill::LogLevel::Error);
+		app::context.logger->set_log_level(quill::LogLevel::Info);
 
 		draw::FrameBuf fb_main{app::video.window_texture_pixels,
 													 app::video.width, app::video.height};
@@ -60,13 +60,6 @@ int main(int argc, char *argv[]) {
 			app::update_state_queues();
 			process_events();
 
-			// {
-			// 	auto result = lsystem_new::test_func(8);
-			// 	if (!result) {
-			// 		print_info("error passed to caller");
-			// 	}
-			// }
-
 			{
 				State s = update_gui(lsystem_manager);
 				if (s == State::Error) { return 1;}
@@ -77,8 +70,9 @@ int main(int argc, char *argv[]) {
 				if (s == State::Error) { return 1; }
 			}
 
-			// lsystem_new::update_generator(test_generator);
-
+			for (auto &[id, generator] : lsystem_manager.generators) {
+				auto result = lsystem_new::update_generator(generator.get());
+			}
 
 			// panning must be changed so it doesnt redraw, it has to use pixels and scale
 			if (viewport::spec.panning_active) {
@@ -172,187 +166,202 @@ void process_events() {
 	}
 }
 
+struct GuiVariable {
+	bool use_slider{false};
+	float slider_start{0.0};
+	float slider_end{10.0};
+	char expression[lsystem_new::textfield_size]{};
+	GuiVariable() = default;
+	GuiVariable(const double slider_end_) : slider_end(slider_end_) {}
+};
+
+// this should be generated on init
+
+struct GeneratorWindowTab {
+	int id{};
+	GeneratorWindowTab(const int id_) :id{id_} {}
+	std::unordered_map<lsystem_new::SymbolCategory, GuiVariable> symbol_defaults{};
+	std::unordered_map<std::string, GuiVariable> global_variables{};
+	void update_variables();
+};
 
 struct TabManager {
-	std::vector<int> tab_ids;
+	std::vector<GeneratorWindowTab> tabs;
 	int next_tab_id{};
 	inline int add_tab() {
-		tab_ids.push_back(next_tab_id++);
+		tabs.push_back(next_tab_id++);
 		return next_tab_id - 1;
 	}
   inline void remove_tab(int position) {
-    if (tab_ids.empty()) { return; }
-		tab_ids.erase(tab_ids.begin() + position);
+    if (tabs.empty()) { return; }
+		tabs.erase(tabs.begin() + position);
   }
 };
 
-State update_generator_window_tab(lsystem_new::LsystemManager& lsystem_manager) {
-	if (ImGui::Button("Test")) {
-		print_info("test");
+State update_generator_window_tab(
+		lsystem_new::LsystemManager& lsystem_manager, GeneratorWindowTab& tab) {
+	lsystem_new::Generator* generator = lsystem_manager.get_generator(tab.id);
+
+	if (ImGui::Button("Expand L-String")) {
+		generator->iterations++;
+		generator->reset_needed = true;
 	}
+	ImGui::SameLine();
+	if (ImGui::Button("Regenerate L-String")) {
+		generator->reset_needed = true;
+	}
+	ImGui::SameLine();
+	if (ImGui::Button("Clear L-String")) {
+		generator->clear();
+		generator->reset_needed = true;
+	}
+	ImGui::Text("Current iteration: %d", generator->current_iteration);
+	ImGui::SameLine();
+	if (ImGui::Button("Print L-string")) {
+		fmt::print("L-string: {}\n", generator->lstring);
+	}
+
+
+	// ___AXIOM___
+	// TODO
+	if (ImGui::TreeNode("Axiom")) {
+		if (ImGui::InputText("text", generator->axiom, app::gui.textfield_size)) {
+			if (lstring_live_regen) {
+				generator->reset_needed= true;
+			}
+		}
+		ImGui::TreePop();
+	}
+
+	if (ImGui::Button("Add Production")) {
+		generator->add_production();
+	}
+	if (ImGui::Button("Remove Production")) {
+		generator->remove_production();
+	}
+
+	// ---- Productions ----
+	for (int i = 0; i < generator->productions.size(); i++) {
+		std::string label = fmt::format("Production {}", i + 1);
+		auto &production = generator->productions[i];
+
+		// ---- symbol selection ---- 
+		if (ImGui::TreeNode(label.c_str())) {
+			static ImGuiComboFlags flags = 0;
+			std::string symbol_str = fmt::format("{}", production.symbol);
+			const char *combo_preview_value = symbol_str.c_str();
+			if (ImGui::BeginCombo("symbol", combo_preview_value, flags)) {
+				for (int n = 0; n < lsystem_new::symbols.size(); n++) {
+					char symbol = lsystem_new::symbols[n];
+					const bool is_selected = (symbol == production.symbol);
+
+					symbol_str = fmt::format("{}", symbol);
+					if (ImGui::Selectable(symbol_str.c_str(), is_selected))
+						production.symbol = symbol;
+
+					// Set the initial focus when opening the combo (scrolling +
+					// keyboard navigation focus)
+					if (is_selected)
+						ImGui::SetItemDefaultFocus();
+				}
+				ImGui::EndCombo();
+			}
+
+			// ---- condition ---- 
+			if (ImGui::InputText("condition", production.condition,
+											 app::gui.textfield_size)) {
+				generator->reset_needed = true;
+			}
+
+			// ---- rule ----
+			if (ImGui::InputText("rule", production.rule, 
+											 app::gui.textfield_size)) {
+				generator->reset_needed = true;
+			}
+			ImGui::TreePop();
+		}
+	}
+
+
+	ImGui::SliderInt("Iterations", &generator->iterations, 1, 16);
+
+	// ---- default variables ----
+	for (auto& [symbol_category, value] : generator->symbol_defaults) {
+		std::string name = lsystem_new::to_string(symbol_category);
+		auto& variable = tab.symbol_defaults[symbol_category]; // var_data
+
+		float temp_value{static_cast<float>(value)};
+		if (symbol_category == lsystem_new::SymbolCategory::Rotate) {
+			temp_value = value / gk::pi;
+		}
+
+		if (ImGui::Checkbox(fmt::format("{} use slider?", name).c_str(),
+					&variable.use_slider)) {}
+		if (variable.use_slider) {
+			ImGui::InputFloat(fmt::format("{}_min", name).c_str(),
+					&(variable.slider_start));
+			ImGui::InputFloat(fmt::format("{}_max", name).c_str(),
+					&(variable.slider_end));
+			if (ImGui::SliderFloat(fmt::format("{}_slider", name).c_str(), &(temp_value),
+					variable.slider_start, variable.slider_end)) {
+				if (symbol_category == lsystem_new::SymbolCategory::Rotate) {
+					value = temp_value * gk::pi;
+				} else {
+					value = temp_value;
+				}
+				generator->reset_needed = true;
+			}
+		} else {
+			if (ImGui::InputText(fmt::format("{}_expr", name).c_str(),
+						variable.expression, app::gui.textfield_size)) {
+				auto locals = std::unordered_map<std::string, double>{};
+				auto result = lsystem_new::evaluate_expression(locals, generator->global_variables,
+						variable.expression);
+				if (!result) { 
+					// TODO: draw in red
+					continue;
+				}
+				value = result.value();
+				generator->reset_needed = true;
+			}
+		}
+	}
+
+
+	// ---- global variables ----
+	for (auto& [name, value] : generator->global_variables) {
+		auto& variable = tab.global_variables[name]; // var_data
+
+		if (ImGui::Checkbox(fmt::format("{} use slider?", name).c_str(),
+					&variable.use_slider)) {}
+		if (variable.use_slider) {
+			ImGui::InputFloat(fmt::format("{}_min", name).c_str(),
+					&(variable.slider_start));
+			ImGui::InputFloat(fmt::format("{}_max", name).c_str(),
+					&(variable.slider_end));
+			float temp_value{static_cast<float>(value)};
+			if (ImGui::SliderFloat(fmt::format("{}_slider", name).c_str(), &(temp_value),
+					variable.slider_start, variable.slider_end)) {
+				value = temp_value;
+				generator->reset_needed = true;
+			}
+		} else {
+			if (ImGui::InputText(fmt::format("{}_expr", name).c_str(),
+						variable.expression, app::gui.textfield_size)) {
+				auto locals = std::unordered_map<std::string, double>{};
+				auto result = lsystem_new::evaluate_expression(locals, generator->global_variables,
+						variable.expression);
+				if (!result) { 
+					// TODO: draw in red
+					continue;
+				}
+				value = result.value();
+				generator->reset_needed = true;
+			}
+		}
+	}
+
 	return State::True;
-//
-//
-// 	lsystem::Module* module = lsystem_manager.get_module(tab.module_id);
-// 	assert(module);
-// 	if (ImGui::Button("Expand L-String")) {
-// 		{
-// 			State state = lsystem::expand_lstring(module, true);
-// 			if (state == State::Error) { return state; }
-// 		}
-// 	}
-// 	ImGui::SameLine();
-// 	if (ImGui::Button("Regenerate L-String")) {
-// 		{
-// 			State state = lsystem::regenerate_lstring(module);
-// 			if (state == State::Error) { return state; }
-// 		}
-// 	}
-// 	ImGui::SameLine();
-// if (ImGui::Button("Clear L-String")) {
-// 		lsystem::clear_lstring(module);
-// 	}
-// 	ImGui::SameLine();
-// 	if (ImGui::Button("Regen Plant")) {
-// 		module->plant.needs_regen = true;
-// 	}
-// 	ImGui::SameLine();
-// 	ImGui::Text("Current iteration: %d", module->geneartion_manager.current_iteration);
-// 	if (ImGui::Button("Print L-string")) {
-// 		fmt::print("L-string: {}\n", module->lstring);
-// 	}
-//
-//
-// 	// 1. if current iteration is 0
-// 	// 2. every frame check if lstring needs regen
-//
-// 	// ___AXIOM___
-// 	// TODO
-// 	if (ImGui::TreeNode("Axiom")) {
-// 		if (ImGui::InputText("text", module->geneartion_manager.axiom, app::gui.textfield_size)) {
-// 			if (lstring_live_regen) {
-// 				module->geneartion_manager.needs_regen = true;
-// 			}
-// 			// 	State state = lsystem::expand(module, module->geneartion_manager.axiom);
-// 			// 	if (state == State::Error) { return state; }
-// 			// 	module->geneartion_manager.iteration_count = 1;
-// 			// }
-// 		}
-// 		ImGui::TreePop();
-// 	}
-//
-// 	if (ImGui::Button("Add Rule")) {
-// 		module->geneartion_manager.add_rule();
-// 	}
-//
-// 	// ___RULES___
-// 	for (int i = 0; i < module->geneartion_manager.rules.size(); i++) {
-// 		std::string label = fmt::format("Rule {}", i + 1);
-// 		auto &rule = module->geneartion_manager.rules[i];
-//
-// 		// select the symbol the rule works on
-// 		if (ImGui::TreeNode(label.c_str())) {
-// 			// ___SYMBOL_SELECTION_COMNO___
-// 			static ImGuiComboFlags flags = 0;
-// 			std::string symbol_str = fmt::format("{}", rule.symbol);
-// 			const char *combo_preview_value = symbol_str.c_str();
-// 				// &rule.symbol;
-// 			if (ImGui::BeginCombo("symbol", combo_preview_value, flags)) {
-// 				for (int n = 0; n < lsystem::symbols.size(); n++) {
-// 					char symbol = lsystem::symbols[n];
-// 					const bool is_selected = (symbol == rule.symbol);
-//
-// 					symbol_str = fmt::format("{}", symbol);
-// 					if (ImGui::Selectable(symbol_str.c_str(), is_selected))
-// 						rule.symbol = symbol;
-//
-// 					// Set the initial focus when opening the combo (scrolling +
-// 					// keyboard navigation focus)
-// 					if (is_selected)
-// 						ImGui::SetItemDefaultFocus();
-// 				}
-// 				ImGui::EndCombo();
-// 			}
-//
-// 			if (ImGui::InputText("condition", rule.textfield_condition,
-// 											 app::gui.textfield_size)) {
-// 				if (lstring_live_regen) {
-// 					module->geneartion_manager.needs_regen = true;
-// 				}
-// 				// if (module->geneartion_manager.iteration_count <= 1) {
-// 				// 	State state = lsystem::expand(module, module->geneartion_manager.axiom);
-// 				// 	if (state == State::Error) { return state; }
-// 				// 	module->geneartion_manager.iteration_count = 1;
-// 				// }
-// 			}
-// 			if (ImGui::InputText("rule", rule.textfield_rule, 
-// 											 app::gui.textfield_size)) {
-//
-// 				if (lstring_live_regen) {
-// 					module->geneartion_manager.needs_regen = true;
-// 				}
-// 				// if (module->geneartion_manager.iteration_count <= 1) {
-// 				// 	State state = lsystem::expand(module, module->geneartion_manager.axiom);
-// 				// 	if (state == State::Error) { return state; }
-// 				// 	module->geneartion_manager.iteration_count = 1;
-// 				// }
-// 			}
-// 			ImGui::TreePop();
-// 		}
-// 	}
-//
-// 	ImGui::SliderInt("Iterations", &module->geneartion_manager.iterations, 1, 16);
-//
-// 	// ---- default variables ----
-// 	for (int i = 0; i < module->default_vars.size(); i++) {
-// 		lsystem::Var &var = module->default_vars[i];
-// 		if (ImGui::Checkbox(fmt::format("{} use slider?", var.label).c_str(),
-// 					&var.use_slider)) {}
-// 		if (var.use_slider) {
-// 			ImGui::InputFloat(fmt::format("{}_min", var.label).c_str(),
-// 					&(var.slider_start));
-// 			ImGui::InputFloat(fmt::format("{}_max", var.label).c_str(),
-// 					&(var.slider_end));
-// 			if (ImGui::SliderFloat(fmt::format("{}_slider", var.label).c_str()
-// 						, &(var.value),
-// 					var.slider_start, var.slider_end)) {
-// 				(var.expr)[0] = '\0';
-// 				module->plant.needs_regen = true;
-// 			}
-// 		} else {
-// 			if (ImGui::InputText(fmt::format("{}_text", var.label).c_str(),
-// 						var.expr, app::gui.textfield_size)) {
-// 				module->plant.needs_regen = true;
-// 			}
-// 		}
-// 	}
-//
-// 	// ---- global variables ----
-// 	for (int i = 0; i < module->global_vars.size(); i++) {
-// 		lsystem::Var &var = module->global_vars[i];
-// 		if (ImGui::Checkbox(fmt::format("{} use slider?", var.label).c_str(),
-// 					&var.use_slider)) {}
-// 		if (var.use_slider) {
-// 			// ImGui::SameLine();
-// 			ImGui::InputFloat(fmt::format("{}_min", var.label).c_str(),
-// 					&(var.slider_start));
-// 			ImGui::InputFloat(fmt::format("{}_max", var.label).c_str(),
-// 					&(var.slider_end));
-// 			if (ImGui::SliderFloat(fmt::format("{}_slider", var.label).c_str()
-// 						, &(var.value),
-// 					var.slider_start, var.slider_end)) {
-// 				(var.expr)[0] = '\0';
-// 				module->plant.needs_regen = true;
-// 			}
-// 		} else {
-// 			if (ImGui::InputText(fmt::format("{}_text", var.label).c_str(),
-// 						var.expr, app::gui.textfield_size)) {
-// 				module->plant.needs_regen = true;
-// 			}
-// 		}
-// 	}
-//
-// 	ImGui::EndTabItem();
 }
 
 
@@ -399,21 +408,36 @@ State update_generator_window(lsystem_new::LsystemManager& lsystem_manager) {
 			ImGuiTabBarFlags_AutoSelectNewTabs | ImGuiTabBarFlags_Reorderable |
 			ImGuiTabBarFlags_FittingPolicyShrink;
 
-	if (ImGui::BeginTabBar("Modules", tab_bar_flags)) {
+	if (ImGui::BeginTabBar("Generators", tab_bar_flags)) {
+
+		// ---- add generator ----
 		if (ImGui::TabItemButton("+", ImGuiTabItemFlags_Trailing |
 																			ImGuiTabItemFlags_NoTooltip)) {
 			int new_tab_id = generator_tabs.add_tab();
 			lsystem_manager.add_generator(new_tab_id);
+			lsystem_new::Generator* generator = lsystem_manager.get_generator(new_tab_id);
+			GeneratorWindowTab& tab = generator_tabs.tabs[new_tab_id];
+			for (auto& [category, value] : generator->symbol_defaults) {
+				// double slider_end{};
+				// if (category == lsystem_new::SymbolCategory::Rotate) {
+				// 	slider_end = 2 * gk::pi;
+				// }
+				tab.symbol_defaults[category] = GuiVariable{};
+			}
+			for (auto& [name, value] : generator->global_variables) {
+				tab.global_variables[name] = GuiVariable{};
+			}
 		}
 
 		// Update opened tabs
-		for (int i = 0; i < generator_tabs.tab_ids.size();) {
+		for (int i = 0; i < generator_tabs.tabs.size();) {
 			bool open = true;
-			int tab_id = generator_tabs.tab_ids[i];
+			auto& tab = generator_tabs.tabs[i];
+			int tab_id = generator_tabs.tabs[i].id;
 			std::string name = fmt::format("{}", tab_id);
 
 			if (ImGui::BeginTabItem(name.c_str(), &open, ImGuiTabItemFlags_None)) {
-				State state = update_generator_window_tab(lsystem_manager);
+				State state = update_generator_window_tab(lsystem_manager, tab);
 				if (state == State::Error) { return state; }
 				ImGui::EndTabItem();
 			}
@@ -421,7 +445,7 @@ State update_generator_window(lsystem_new::LsystemManager& lsystem_manager) {
 			if (!open) {
 				State state = lsystem_manager.remove_generator(tab_id);
 				if (state == State::Error) { return state; }
-				generator_tabs.tab_ids.erase(generator_tabs.tab_ids.begin() + i);
+				generator_tabs.remove_tab(i);
 			} else {
 				i++;
 			}
@@ -451,9 +475,9 @@ State update_builder_window(lsystem_new::LsystemManager& lsystem_manager) {
 		}
 
 		// Update opened tabs
-		for (int i = 0; i < builder_tabs.tab_ids.size();) {
+		for (int i = 0; i < builder_tabs.tabs.size();) {
 			bool open = true;
-			int tab_id = builder_tabs.tab_ids[i];
+			int tab_id = builder_tabs.tabs[i].id;
 			std::string name = fmt::format("{}", tab_id);
 
 			if (ImGui::BeginTabItem(name.c_str(), &open, ImGuiTabItemFlags_None)) {
@@ -465,7 +489,7 @@ State update_builder_window(lsystem_new::LsystemManager& lsystem_manager) {
 			if (!open) {
 				// State state = lsystem_manager.remove_generator(tab_id);
 				// if (state == State::Error) { return state; }
-				builder_tabs.tab_ids.erase(builder_tabs.tab_ids.begin() + i);
+				builder_tabs.tabs.erase(builder_tabs.tabs.begin() + i);
 			} else {
 				i++;
 			}

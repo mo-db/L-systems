@@ -111,6 +111,7 @@ evaluate_production(std::unordered_map<std::string, double>& local_variables,
 std::expected<std::vector<std::string>, Error>
 split_arg_block(const std::string &arg_block) {
 	if (arg_block.empty() || arg_block.front() != '{' || arg_block.back() != '}') {
+		// throw std::runtime_error("test");
 		LOG_ERROR(app::context.logger, "arg_block invalid: {}", arg_block);
 		return std::unexpected(Error::InvalidArgument); 
 	}
@@ -133,6 +134,7 @@ split_arg_block(const std::string &arg_block) {
 std::expected<std::string, Error>
 get_arg_block(const std::string lstring, const int index) {
 	if (lstring.empty() || index >= lstring.size() || lstring[index] != '{')  {
+
 		LOG_ERROR(app::context.logger, "invalid arguments");
 		return std::unexpected(Error::InvalidArgument);
 	}
@@ -229,17 +231,27 @@ std::unordered_map<std::string, double> args_to_map(std::vector<double> args) {
 
 std::expected<std::string, Error>
 maybe_apply_rule(Generator* generator, const char symbol, std::string arg_block) {
-	auto args = parse_arg_block(arg_block);
-	if (!args) { return std::unexpected(args.error()); }
+	
+	std::unordered_map<std::string, double> local_variables{};
+	if (arg_block.empty()) {
+	} else {
+		std::expected<std::vector<double>, Error> args = parse_arg_block(arg_block);
+		if (!args) { return std::unexpected(args.error()); }
 
-	std::unordered_map<std::string, double> local_variables = args_to_map(args.value());
+		local_variables = args_to_map(args.value());
+	}
+
 
 	// ---- try to match a rule ----
 	for (auto &production : generator->productions) {
 		std::string condition = production.condition;
 		std::string rule = production.rule;
 
+		if (rule.empty()) { continue; }
+
 		if (production.symbol != symbol) { continue; }
+				LOG_INFO(app::context.logger, "symbol match");
+
 
 		if (!condition.empty()) {
 			auto result = evaluate_expression(local_variables, generator->global_variables, condition);
@@ -252,6 +264,8 @@ maybe_apply_rule(Generator* generator, const char symbol, std::string arg_block)
 				continue;
 			}
 		}
+
+		LOG_INFO(app::context.logger, "condition match");
 
 		// ---- rule matched -> replace symbol with rule ----
 		auto result = evaluate_production(local_variables, generator->global_variables, rule);
@@ -281,7 +295,7 @@ reset_generator(Generator* generator) {
 	}
 
 	generator->lstring = result.value();
-	generator->current_iteration++;
+	// generator->current_iteration++;
 	return {};
 }
 
@@ -303,9 +317,8 @@ std::expected<bool, Error>
 _expand_lstring(Generator* generator) {
 	int index = generator->current_index;
 	std::string& lstring = generator->lstring;
-
-
 	char symbol{};
+
   while (index < lstring.size()) {
 
     // ---- check time ----
@@ -315,30 +328,31 @@ _expand_lstring(Generator* generator) {
       return false;
     }
 
-		if (lstring[index] == '{') {
-			if (symbol == 0) { throw std::logic_error("symbol invalid"); }
-			auto arg_block = get_arg_block(lstring, index);
-			if (!arg_block) { return std::unexpected(arg_block.error()); }
+		symbol = lstring[index];
+		if (index + 1 < lstring.size()) {
+			if (lstring[index + 1] == '{') {
+				index++;
+				auto arg_block = get_arg_block(lstring, index);
+				if (!arg_block) { return std::unexpected(arg_block.error()); }
 
-			auto result = maybe_apply_rule(generator, symbol, arg_block.value());
-			if (!result) { return std::unexpected(result.error()); }
-			generator->lstring_buffer += result.value();
+				auto result = maybe_apply_rule(generator, symbol, arg_block.value());
+				if (!result) { return std::unexpected(result.error()); }
+				generator->lstring_buffer += result.value();
 
-			index += arg_block.value().size();
-		} else if (lstring[index] == ' ') {
-			continue;
-		} else {
-			if (symbol == 0) {
-				 symbol = lstring[index++];
-				 continue;
+				index += arg_block.value().size();
 			} else {
 				auto result = maybe_apply_rule(generator, symbol, std::string{});
 				if (!result) { return std::unexpected(result.error()); }
 				generator->lstring_buffer += result.value();
-				symbol = 0;
+				index++;
 			}
+		} else {
+			auto result = maybe_apply_rule(generator, symbol, std::string{});
+			if (!result) { return std::unexpected(result.error()); }
+			generator->lstring_buffer += result.value();
+			break;
 		}
-  }
+	}
 
   // ---- expansion completed ----
   generator->current_index = 0;
@@ -356,6 +370,7 @@ update_generator(Generator* generator) {
 		generator->reset_needed = false;
 		auto result = reset_generator(generator);
 		if (!result) { return std::unexpected(result.error()); }
+		LOG_INFO(app::context.logger, "reset finished");
 		return {};
 	}
 
@@ -363,7 +378,6 @@ update_generator(Generator* generator) {
 	if (!result) { return std::unexpected(result.error()); }
 	if (result.value() == true) {
 		// TODO: probably move, and put generator id in here
-		LOG_INFO(app::context.logger, "generation finished");
 	}
 	return {};
 }

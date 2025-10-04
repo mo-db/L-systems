@@ -26,11 +26,24 @@ enum class SymbolCategory : size_t {
   Move = 0,
   Rotate = 1,
   Width = 2,
-  // Color = 3,
+  Color = 3,
 };
 
 std::optional<SymbolCategory> get_symbol_category(const char ch);
-
+inline std::string to_string(SymbolCategory category) {
+  switch (category) {
+  case SymbolCategory::Move:
+    return "Move";
+  case SymbolCategory::Rotate:
+    return "Rotate";
+  case SymbolCategory::Width:
+    return "Width";
+  case SymbolCategory::Color:
+    return "Color";
+  default:
+    return "Unknown";
+  }
+}
 
 // // ---- Plant ----
 // struct Branch {
@@ -137,7 +150,7 @@ struct Generator {
   bool reset_needed{false};
   bool done_generating{false};
   int current_iteration{};
-  int iterations{};
+  int iterations{1};
   int current_index{};
 	std::string lstring{};
   std::string lstring_buffer{};
@@ -148,6 +161,13 @@ struct Generator {
     if (productions.empty()) { return; }
     productions.pop_back();
   }
+	inline void clear() {
+		iterations = 1;
+		current_iteration = 0;
+		current_index = 0;
+		lstring.clear();
+		lstring_buffer.clear();
+	}
 
   std::unordered_map<SymbolCategory, double> symbol_defaults{
       {SymbolCategory::Move, 50.0},
