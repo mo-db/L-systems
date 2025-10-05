@@ -180,8 +180,59 @@ struct Generator {
   State update_vars();
 };
 
+// ---- building ----
+// struct Construct {};
+
+struct Branch {
+	Vec2 start{};
+	Vec2 end{};
+	double width{};
+	uint32_t color{0xFF00FFFF};
+};
+
+struct Plant {
+	Vec2 start_position{};
+	double start_angle{};
+	double start_width{};
+	uint32_t start_color{0xFF00FFFF};
+
+	int current_index{};
+	std::string* lstring{};
+	struct Data {
+		Vec2 position{};
+		double angle{};
+		double width{};
+		uint32_t color{0xFF00FFFF};
+	} data;
+	std::vector<Data> data_stack{};
+
+	int current_branch{};
+	std::vector<Branch> branches{};
+
+  bool reset_needed{false};
+	void reset(std::string* lstring_) {
+		current_index = 0;
+		data.position = start_position;
+		data.angle = start_angle;
+		data.width = start_width;
+		data.color = start_color;
+		data_stack.clear();
+		branches.clear();
+		current_branch = 0;
+		lstring = lstring_;
+	}
+};
+
+struct PlantBuilder {
+  bool done_building{false};
+	std::vector<Plant> plants{};
+	// std::unordered_map<int, std::unique_ptr<Plant>> plants;
+	std::expected<bool, Error> build_timed(Plant& plant);
+};
+
 struct LsystemManager {
 	std::unordered_map<int, std::unique_ptr<Generator>> generators;
+	std::unordered_map<int, std::unique_ptr<PlantBuilder>> plant_builders;
 	std::vector<std::string*> lstrings;
 	Generator* get_generator(int id) {
 		if (generators.find(id) == generators.end()) {
@@ -256,5 +307,9 @@ update_generator(Generator* generator);
 
 std::expected<void, Error>
 test_func(int i);
+
+// ---- builder ----
+std::expected<void, Error> build_construct_timed();
+std::expected<void, Error> draw_construct_timed(draw::FrameBuf &fb);
 
 } // namespace lsystem_new

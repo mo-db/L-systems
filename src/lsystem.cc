@@ -440,6 +440,7 @@ State _expand_lstring(Module *module) {
     } else if (index + 1 >= lstring.size() || lstring[index + 1] != '{') {
       lstring_buffer +=
           maybe_apply_rule(module, lstring[index], std::vector<double>{});
+    	index++;
     } else if (lstring[index + 1] == '}') {
       index += 2; // move to after '{'
       std::string args_string = util::get_substr(lstring, index, '}');
@@ -450,7 +451,6 @@ State _expand_lstring(Module *module) {
       lstring_buffer += maybe_apply_rule(module, lstring[index], args_values);
       index += args_string.size() + 1; // move to after '}'
     }
-    index++;
   }
 
   // ---- expansion completed ----

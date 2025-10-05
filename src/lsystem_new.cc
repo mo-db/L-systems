@@ -108,7 +108,7 @@ evaluate_production(std::unordered_map<SymbolCategory, double>& symbol_defaults,
           if (i + 1 < args.size()) {
             evaluated_production += fmt::format("{};", args[i]);
           } else {
-            evaluated_production += fmt::format("{}", args[i]);
+ evaluated_production += fmt::format("{}", args[i]);
           }
         }
         evaluated_production += "}";
@@ -401,4 +401,153 @@ update_generator(Generator* generator) {
 	}
 	return {};
 }
+
+void _grow(Plant& plant, const float length) {
+	Plant::Data& data = plant.data;
+	Vec2 old_position = data.position;
+	data.position.x += length * cos(data.angle);
+	data.position.y += length * -sin(data.angle);
+	plant.branches.push_back({old_position, data.position, data.width});
+}
+void _jump(Plant& plant, const float length) {
+	Plant::Data& data = plant.data;
+	data.position.x += length * cos(data.angle);
+	data.position.y += length * -sin(data.angle);
+}
+
+void _turn(Plant::Data& data, const float angle) { data.angle += angle; }
+void _change_width(Plant::Data& data, const float width) { data.width += width; }
+
+std::expected<void, Error>
+symbol_action(Plant& plant, const char symbol, std::string& arg_block) {
+	Plant::Data& data = plant.data;
+	std::vector<Plant::Data>& data_stack = plant.data_stack;
+
+	auto args = parse_arg_block(arg_block);
+	if (!args) { return std::unexpected(args.error()); }
+
+	double x = args.value().front();
+
+	auto symbol_category = get_symbol_category(symbol);
+	if (symbol_category == std::nullopt) { return std::unexpected(Error::Generic); }
+
+	// TODO: visable not used
+	if (symbol_category.value() == SymbolCategory::Move) {
+		if (std::islower(symbol)) {
+			_jump(plant, x);
+		} else {
+			_grow(plant, x);
+		}
+	}
+
+	// turn turtle counter-clockwise
+	if (symbol == '-') {
+    _turn(data, -x);
+	}
+	// turn turtle clockwise
+	if (symbol == '+') {
+    _turn(data, x);
+	}
+
+	// TODO
+	// this should either set or change the width
+	if (symbol == '^') {
+		_change_width(data, -x);
+	}
+	if (symbol == '&') {
+		_change_width(data, x);
+	}
+
+	// push and pop turtle state
+	if (symbol == '[') {
+    data_stack.push_back(data);
+	}
+  if (symbol == ']') {
+    data = data_stack.back();
+    data_stack.pop_back();
+	}
+	return {};
+}
+
+
+// ---- building ----
+std::expected<bool, Error>
+PlantBuilder::build_timed(Plant& plant) {
+	int index = plant.current_index;
+	std::string& lstring = plant.lstring;
+	char symbol{};
+
+  while (index < lstring.size()) {
+
+    // ---- check time ----
+    util::ms elapsed = util::Clock::now() - app::context.frame_start;
+    if ((elapsed / app::context.frame_time) >= 0.6) {
+      plant.current_index = index;
+      return false;
+    }
+
+		symbol = lstring[index++];
+		if (index < lstring.size() || lstring[index] != '{') {
+			auto arg_block = get_arg_block(lstring, index);
+			if (!arg_block) { return std::unexpected(arg_block.error()); }
+
+			auto result = symbol_action(plant, symbol, arg_block.value());
+			if (!result) { return std::unexpected(result.error()); }
+
+			index += arg_block.value().size();
+		} else {
+			LOG_ERROR(app::context.logger, "lstring syntax invalid");
+			return std::unexpected(Error::Syntax);
+		}
+	}
+
+  // ---- expansion completed ----
+  plant.current_index = 0;
+  return true;
+}
+
+std::expected<bool, Error>
+draw_plant_timed(Plant& plant, draw::FrameBuf &fb) {
+	for (int i = plant.current_branch; i < plant.branches.size(); i++) {
+
+    // ---- check time ----
+    util::ms elapsed = util::Clock::now() - app::context.frame_start;
+    if ((elapsed / app::context.frame_time) >= 0.6) {
+      plant.current_branch = i;
+      return false;
+    }
+
+		auto &branch = plant.branches[i];
+		draw::wide_line(fb, Line2{branch.start, branch.end}, branch.color, branch.width);
+	}
+	plant.current_branch = 0;
+	return true;
+}
+
+std::expected<void, Error>
+update_plants(PlantBuilder* plant_builder) {
+
+	// if the lstring the plant points to was changed and is finished
+	if (plant_builder->reset_needed == true) {
+		plant_builder->reset_needed = false;
+		auto result = reset_plant_builder(plant_builder);
+		if (!result) { return std::unexpected(result.error()); }
+		LOG_INFO(app::context.logger, "reset finished");
+		return {};
+	}
+
+	auto result = PlantBuilder::build_timed(generator);
+	if (!result) { return std::unexpected(result.error()); }
+	if (result.value() == true) {
+		// TODO: probably move, and put generator id in here
+	}
+
+	auto result = draw_plant_timed(generator);
+	if (!result) { return std::unexpected(result.error()); }
+	if (result.value() == true) {
+		// TODO: probably move, and put generator id in here
+	}
+	return {};
+}
+
 } // namespace lsystem_new
