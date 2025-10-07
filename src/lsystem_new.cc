@@ -302,8 +302,7 @@ maybe_apply_rule(Generator* generator, const char symbol, std::string arg_block)
 
 std::expected<void, Error>
 reset_generator(Generator* generator) {
-	generator->lstring.clear();
-	generator->current_iteration = 0;
+	generator->clear();
 	std::string axiom = generator->axiom;
 	std::unordered_map<std::string, double> local_variables{};
 
@@ -315,7 +314,6 @@ reset_generator(Generator* generator) {
 	}
 
 	generator->lstring = result.value();
-	// generator->current_iteration++;
 	return {};
 }
 
@@ -390,14 +388,17 @@ update_generator(Generator* generator) {
 		generator->reset_needed = false;
 		auto result = reset_generator(generator);
 		if (!result) { return std::unexpected(result.error()); }
+		generator->done_generating = false;
 		LOG_INFO(app::context.logger, "reset finished");
-		return {};
 	}
 
-	auto result = generate_timed(generator);
-	if (!result) { return std::unexpected(result.error()); }
-	if (result.value() == true) {
-		// TODO: probably move, and put generator id in here
+	if (!generator->done_generating) {
+		auto result = generate_timed(generator);
+		if (!result) { return std::unexpected(result.error()); }
+		if (result.value() == true) {
+			generator->generator_state.notify(generator->lstring);
+			generator->done_generating = true;
+		}
 	}
 	return {};
 }
@@ -472,10 +473,12 @@ symbol_action(Plant& plant, const char symbol, std::string& arg_block) {
 
 // ---- building ----
 std::expected<bool, Error>
-PlantBuilder::build_timed(Plant& plant) {
+build_timed(Plant& plant) {
 	int index = plant.current_index;
 	std::string& lstring = plant.lstring;
 	char symbol{};
+
+	// LOG_INFO(app::context.logger, "fuck you");
 
   while (index < lstring.size()) {
 
@@ -486,8 +489,10 @@ PlantBuilder::build_timed(Plant& plant) {
       return false;
     }
 
+		LOG_INFO(app::context.logger, "fuck you2");
+
 		symbol = lstring[index++];
-		if (index < lstring.size() || lstring[index] != '{') {
+		if (index < lstring.size() && lstring[index] == '{') {
 			auto arg_block = get_arg_block(lstring, index);
 			if (!arg_block) { return std::unexpected(arg_block.error()); }
 
@@ -507,17 +512,24 @@ PlantBuilder::build_timed(Plant& plant) {
 }
 
 std::expected<bool, Error>
-draw_plant_timed(Plant& plant, draw::FrameBuf &fb) {
+draw_plant_timed(Plant& plant, draw::FrameBuf& fb) {
+
+	LOG_INFO(app::context.logger, "branches count {}", plant.branches.size());
+	LOG_INFO(app::context.logger, "branch: {}", plant.current_branch);
+	draw::wide_line(fb, Line2{{200.0, 000.0}, {400.0, 400.0}}, 0xFFFFFFFF, 5.0);
 	for (int i = plant.current_branch; i < plant.branches.size(); i++) {
 
     // ---- check time ----
     util::ms elapsed = util::Clock::now() - app::context.frame_start;
-    if ((elapsed / app::context.frame_time) >= 0.6) {
+    if ((elapsed / app::context.frame_time) >= 0.9) {
       plant.current_branch = i;
+			LOG_INFO(app::context.logger, "time");
       return false;
     }
 
 		auto &branch = plant.branches[i];
+		LOG_INFO(app::context.logger, "branches {},{},{},{}", branch.start.x, branch.start.y,
+				branch.end.x, branch.end.y);
 		draw::wide_line(fb, Line2{branch.start, branch.end}, branch.color, branch.width);
 	}
 	plant.current_branch = 0;
@@ -525,27 +537,32 @@ draw_plant_timed(Plant& plant, draw::FrameBuf &fb) {
 }
 
 std::expected<void, Error>
-update_plants(PlantBuilder* plant_builder) {
+update_plant(Plant* plant, draw::FrameBuf& fb) {
 
 	// if the lstring the plant points to was changed and is finished
-	if (plant_builder->reset_needed == true) {
-		plant_builder->reset_needed = false;
-		auto result = reset_plant_builder(plant_builder);
-		if (!result) { return std::unexpected(result.error()); }
+	if (plant->reset_needed == true) {
+		plant->reset_needed = false;
+		plant->reset();
+		plant->building = true;
 		LOG_INFO(app::context.logger, "reset finished");
 		return {};
 	}
 
-	auto result = PlantBuilder::build_timed(generator);
-	if (!result) { return std::unexpected(result.error()); }
-	if (result.value() == true) {
-		// TODO: probably move, and put generator id in here
+	if (plant->building) {
+		auto result = build_timed(*plant);
+		if (!result) { return std::unexpected(result.error()); }
+		if (result.value() == true) {
+			plant->building = false;
+			LOG_INFO(app::context.logger, "built!");
+		}
 	}
 
-	auto result = draw_plant_timed(generator);
-	if (!result) { return std::unexpected(result.error()); }
-	if (result.value() == true) {
-		// TODO: probably move, and put generator id in here
+	if (!plant->branches.empty()) {
+		auto result_2 = draw_plant_timed(*plant, fb);
+		if (!result_2) { return std::unexpected(result_2.error()); }
+		if (result_2.value() == true) {
+			// LOG_INFO(app::context.logger, "drawn!");
+		}
 	}
 	return {};
 }

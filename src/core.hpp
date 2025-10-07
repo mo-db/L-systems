@@ -10,6 +10,7 @@
 // containers
 #include <array>
 #include <vector>
+#include <forward_list>
 
 // math, algorithms
 #include <algorithm>

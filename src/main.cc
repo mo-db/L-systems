@@ -3,6 +3,7 @@
 #include "graphics.hpp"
 #include "rasterize.hpp"
 #include "lsystem_new.hpp"
+#include "observer.hpp"
 
 bool mark_for_regen = false;
 bool lstring_live_regen = true;
@@ -55,10 +56,29 @@ int main(int argc, char *argv[]) {
 		app::gui.show_generator_window = true;
 		app::gui.show_builder_window = true;
 
+
+		lsystem_manager.add_plant_builder(0);
+		
+
+
 		while(app::context.keep_running) {
 			app::context.frame_start = util::Clock::now();
 			app::update_state_queues();
 			process_events();
+
+
+			// // CHANGE:
+			// if (lsystem_manager.generators.size() == 1 &&
+			// 		lsystem_manager.plant_builders.size() == 1) {
+			// 	if (lsystem_manager.generators[0]->done_generating) {
+			// 		lsystem_manager.plant_builders[0]->plant.reset_needed = true;
+			// 		lsystem_manager.plant_builders[0]->plant.lstring =
+			// 			lsystem_manager.generators[0]->lstring;
+			// 		LOG_INFO(app::context.logger, "plant will reset!");
+			// 	}
+			// }
+
+			// draw::wide_line(fb_main, Line2{{0.0, 0.0}, {900.0, 400.0}}, 0xFFFFFFFF, 5.0);
 
 			{
 				State s = update_gui(lsystem_manager);
@@ -72,6 +92,13 @@ int main(int argc, char *argv[]) {
 
 			for (auto &[id, generator] : lsystem_manager.generators) {
 				auto result = lsystem_new::update_generator(generator.get());
+			}
+
+			for (auto &[id, builder] : lsystem_manager.plant_builders) {
+				for (auto &[id, plant] : builder->plants) {
+					auto result = lsystem_new::update_plant(plant.get(), fb_main);
+				}
+				// auto result = lsystem_new::update_builder(builder.get(), fb_main);
 			}
 
 			// panning must be changed so it doesnt redraw, it has to use pixels and scale
@@ -187,6 +214,42 @@ struct GeneratorWindowTab {
 
 struct TabManager {
 	std::vector<GeneratorWindowTab> tabs;
+	int next_tab_id{};
+	inline int add_tab() {
+		tabs.push_back(next_tab_id++);
+		return next_tab_id - 1;
+	}
+  inline void remove_tab(int position) {
+    if (tabs.empty()) { return; }
+		tabs.erase(tabs.begin() + position);
+  }
+};
+
+struct BuilderWindowTab {
+	int id{};
+	BuilderWindowTab(const int id_) :id{id_} {}
+};
+
+struct TabManagerB {
+	std::vector<BuilderWindowTab> tabs;
+	int next_tab_id{};
+	inline int add_tab() {
+		tabs.push_back(next_tab_id++);
+		return next_tab_id - 1;
+	}
+  inline void remove_tab(int position) {
+    if (tabs.empty()) { return; }
+		tabs.erase(tabs.begin() + position);
+  }
+};
+
+struct PlantWindowTab {
+	int id{};
+	PlantWindowTab(const int id_) :id{id_} {}
+};
+
+struct TabManagerP {
+	std::vector<PlantWindowTab> tabs;
 	int next_tab_id{};
 	inline int add_tab() {
 		tabs.push_back(next_tab_id++);
@@ -456,39 +519,86 @@ State update_generator_window(lsystem_new::LsystemManager& lsystem_manager) {
 	return State::True;
 }
 
-State update_builder_window_tab(lsystem_new::LsystemManager& lsystem_manager) {
+State update_plant_window_tab(lsystem_new::LsystemManager& lsystem_manager, 
+		PlantWindowTab& tab) {
+	ImGui::Text("I am a plant");
 	return State::True;
 }
 
-State update_builder_window(lsystem_new::LsystemManager& lsystem_manager) {
-	static TabManager builder_tabs{};
+State update_builder_window_tab(lsystem_new::LsystemManager& lsystem_manager,
+		BuilderWindowTab& tab) {
+	lsystem_new::PlantBuilder* plant_builder = lsystem_manager.get_plant_builder(tab.id);
+	ImGui::Text("Plants: %d", static_cast<int>(plant_builder->plants.size()));
+	static TabManagerP plant_tabs{};
 
 	static ImGuiTabBarFlags tab_bar_flags =
 			ImGuiTabBarFlags_AutoSelectNewTabs | ImGuiTabBarFlags_Reorderable |
 			ImGuiTabBarFlags_FittingPolicyShrink;
 
-	if (ImGui::BeginTabBar("Modules", tab_bar_flags)) {
+	if (ImGui::BeginTabBar("Plants", tab_bar_flags)) {
+		if (ImGui::TabItemButton("+", ImGuiTabItemFlags_Trailing |
+																			ImGuiTabItemFlags_NoTooltip)) {
+			int new_tab_id = plant_tabs.add_tab();
+			lsystem_manager.add_plant(plant_builder, new_tab_id);
+		}
+
+		// Update opened tabs
+		for (int i = 0; i < plant_tabs.tabs.size();) {
+			bool open = true;
+			int tab_id = plant_tabs.tabs[i].id;
+			auto& tab = plant_tabs.tabs[i];
+			std::string name = fmt::format("{}", tab_id);
+
+			if (ImGui::BeginTabItem(name.c_str(), &open, ImGuiTabItemFlags_None)) {
+				State state = update_plant_window_tab(lsystem_manager, tab);
+				if (state == State::Error) { return state; }
+				ImGui::EndTabItem();
+			}
+
+			if (!open) {
+				State state = lsystem_manager.remove_plant(plant_builder, tab_id);
+				if (state == State::Error) { return state; }
+				plant_tabs.tabs.erase(plant_tabs.tabs.begin() + i);
+			} else {
+				i++;
+			}
+		}
+
+		ImGui::EndTabBar();
+	}
+
+	return State::True;
+}
+
+State update_builder_window(lsystem_new::LsystemManager& lsystem_manager) {
+	static TabManagerB builder_tabs{};
+	static ImGuiTabBarFlags tab_bar_flags =
+			ImGuiTabBarFlags_AutoSelectNewTabs | ImGuiTabBarFlags_Reorderable |
+			ImGuiTabBarFlags_FittingPolicyShrink;
+
+	if (ImGui::BeginTabBar("Builders", tab_bar_flags)) {
 		if (ImGui::TabItemButton("+", ImGuiTabItemFlags_Trailing |
 																			ImGuiTabItemFlags_NoTooltip)) {
 			int new_tab_id = builder_tabs.add_tab();
-			// lsystem_manager.add_generator(new_tab_id);
+			lsystem_manager.add_plant_builder(new_tab_id);
 		}
 
 		// Update opened tabs
 		for (int i = 0; i < builder_tabs.tabs.size();) {
 			bool open = true;
 			int tab_id = builder_tabs.tabs[i].id;
+			auto& tab = builder_tabs.tabs[i];
 			std::string name = fmt::format("{}", tab_id);
 
 			if (ImGui::BeginTabItem(name.c_str(), &open, ImGuiTabItemFlags_None)) {
-				State state = update_builder_window_tab(lsystem_manager);
+				State state = update_builder_window_tab(lsystem_manager, tab);
 				if (state == State::Error) { return state; }
 				ImGui::EndTabItem();
 			}
 
 			if (!open) {
-				// State state = lsystem_manager.remove_generator(tab_id);
-				// if (state == State::Error) { return state; }
+				State state = lsystem_manager.remove_plant_builder(tab_id);
+				if (state == State::Error) { return state; }
 				builder_tabs.tabs.erase(builder_tabs.tabs.begin() + i);
 			} else {
 				i++;

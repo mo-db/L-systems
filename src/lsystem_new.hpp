@@ -4,6 +4,7 @@
 #include "app.hpp"
 #include "graphics.hpp"
 #include "rasterize.hpp"
+#include "observer.hpp"
 
 namespace lsystem_new {
 constexpr int textfield_size = 4096;
@@ -147,8 +148,9 @@ struct Production {
 };
 
 struct Generator {
+	observer::Subject generator_state{};
   bool reset_needed{false};
-  bool done_generating{false};
+  bool done_generating{true};
   int current_iteration{};
   int iterations{1};
   int current_index{};
@@ -191,13 +193,18 @@ struct Branch {
 };
 
 struct Plant {
-	Vec2 start_position{};
-	double start_angle{};
-	double start_width{};
+
+	// starting data
+	Vec2 start_position{static_cast<double>(app::video.width)/2.0, 
+		static_cast<double>(app::video.height)/2.0};
+	double start_angle{2.0 * gk::pi};
+	double start_width{5.0};
 	uint32_t start_color{0xFF00FFFF};
 
+	// building data
 	int current_index{};
-	std::string* lstring{};
+	std::string lstring{}; // use string view?
+
 	struct Data {
 		Vec2 position{};
 		double angle{};
@@ -206,11 +213,17 @@ struct Plant {
 	} data;
 	std::vector<Data> data_stack{};
 
+	// finished Plant
 	int current_branch{};
 	std::vector<Branch> branches{};
 
+
   bool reset_needed{false};
-	void reset(std::string* lstring_) {
+	bool building = true;
+
+	observer::Observer ob{reset_needed, lstring};
+
+	void reset() {
 		current_index = 0;
 		data.position = start_position;
 		data.angle = start_angle;
@@ -219,16 +232,25 @@ struct Plant {
 		data_stack.clear();
 		branches.clear();
 		current_branch = 0;
-		lstring = lstring_;
+		building = false;
 	}
 };
 
+// plant manager
 struct PlantBuilder {
+	// environment conditions
   bool done_building{false};
-	std::vector<Plant> plants{};
-	// std::unordered_map<int, std::unique_ptr<Plant>> plants;
-	std::expected<bool, Error> build_timed(Plant& plant);
+	// std::vector<Plant> plants{};
+	std::unordered_map<int, std::unique_ptr<Plant>> plants;
+	
+	// temporary
+	// Plant plant{};
 };
+
+
+std::expected<bool, Error> build_timed(Plant& plant);
+std::expected<bool, Error>
+draw_plant_timed(Plant& plant, draw::FrameBuf &fb);
 
 struct LsystemManager {
 	std::unordered_map<int, std::unique_ptr<Generator>> generators;
@@ -252,6 +274,52 @@ struct LsystemManager {
 		generators.erase(id);
 		return State::True;
 	}
+
+	PlantBuilder* get_plant_builder(int id) {
+		if (plant_builders.find(id) == plant_builders.end()) {
+			return nullptr;
+		}
+		return plant_builders[id].get();
+	}
+	void add_plant_builder(const int id) {
+		plant_builders.emplace(id, std::make_unique<PlantBuilder>());
+	}
+	State remove_plant_builder(int id) {
+		PlantBuilder* plant_builder = get_plant_builder(id);
+		if (!plant_builder) {
+			print_info("no plant_builder found specified id");
+			return State::Error;
+		}
+		plant_builders.erase(id);
+		return State::True;
+	}
+
+	Plant* get_plant(PlantBuilder* builder, int id) {
+		if (builder->plants.find(id) == builder->plants.end()) {
+			return nullptr;
+		}
+		return builder->plants[id].get();
+	}
+
+	void add_plant(PlantBuilder* builder, const int id) {
+		builder->plants.emplace(id, std::make_unique<Plant>());
+		// default registration
+		if (!generators.empty()) {
+			generators.begin()->second->generator_state.add_observer(
+					&(builder->plants[id]->ob));
+		}
+	}
+	State remove_plant(PlantBuilder* builder, int id) {
+		Plant* plant = get_plant(builder, id);
+		if (!plant) {
+			print_info("no plant_builder found specified id");
+			return State::Error;
+		}
+		builder->plants.erase(id);
+		// if i dont use weak_ptr i have to unregister the observer now
+		return State::True;
+	}
+
 };
 
 std::optional<SymbolCategory> 
@@ -306,10 +374,14 @@ std::expected<void, Error>
 update_generator(Generator* generator);
 
 std::expected<void, Error>
+update_builder(PlantBuilder* builder, draw::FrameBuf& fb);
+
+std::expected<void, Error>
+update_plant(Plant* plant, draw::FrameBuf& fb);
+
+std::expected<void, Error>
 test_func(int i);
 
 // ---- builder ----
-std::expected<void, Error> build_construct_timed();
-std::expected<void, Error> draw_construct_timed(draw::FrameBuf &fb);
 
 } // namespace lsystem_new
