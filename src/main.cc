@@ -3,7 +3,6 @@
 #include "graphics.hpp"
 #include "rasterize.hpp"
 #include "lsystem_new.hpp"
-#include "observer.hpp"
 
 bool mark_for_regen = false;
 bool lstring_live_regen = true;
@@ -57,7 +56,7 @@ int main(int argc, char *argv[]) {
 		app::gui.show_builder_window = true;
 
 
-		lsystem_manager.add_plant_builder(0);
+		// lsystem_manager.add_plant_builder(0);
 		
 
 
@@ -99,6 +98,20 @@ int main(int argc, char *argv[]) {
 					auto result = lsystem_new::update_plant(plant.get(), fb_main);
 				}
 				// auto result = lsystem_new::update_builder(builder.get(), fb_main);
+			}
+
+			// CHANGE: clear bg and issue plant redraw
+			if (app::context.clear_bg) {
+				app::context.clear_bg = false;
+				for (int i = 0; i < fb_main.width * fb_main.height; i++) {
+					fb_main.pixels[i] = color::bg;
+				}
+				// plants
+				for (auto &[id, builder] : lsystem_manager.plant_builders) {
+					for (auto &[id, plant] : builder->plants) {
+						plant.get()->done_drawing = false;
+					}
+				}
 			}
 
 			// panning must be changed so it doesnt redraw, it has to use pixels and scale
@@ -279,6 +292,8 @@ State update_generator_window_tab(
 		generator->reset_needed = true;
 	}
 	ImGui::Text("Current iteration: %d", generator->current_iteration);
+	ImGui::Text("Iterations: %d", generator->iterations);
+
 	ImGui::SameLine();
 	if (ImGui::Button("Print L-string")) {
 		fmt::print("L-string: {}\n", generator->lstring);
@@ -346,7 +361,6 @@ State update_generator_window_tab(
 	}
 
 
-	ImGui::SliderInt("Iterations", &generator->iterations, 1, 16);
 
 	// ---- default variables ----
 	for (auto& [symbol_category, value] : generator->symbol_defaults) {
@@ -366,7 +380,7 @@ State update_generator_window_tab(
 			ImGui::InputFloat(fmt::format("{}_max", name).c_str(),
 					&(variable.slider_end));
 			if (ImGui::SliderFloat(fmt::format("{}_slider", name).c_str(), &(temp_value),
-					variable.slider_start, variable.slider_end)) {
+					variable.slider_start, variable.slider_end, "%.5f")) {
 				if (symbol_category == lsystem_new::SymbolCategory::Rotate) {
 					value = temp_value * gk::pi;
 				} else {
@@ -521,7 +535,10 @@ State update_generator_window(lsystem_new::LsystemManager& lsystem_manager) {
 
 State update_plant_window_tab(lsystem_new::LsystemManager& lsystem_manager, 
 		PlantWindowTab& tab) {
+	lsystem_new::PlantBuilder* plant_builder = lsystem_manager.get_plant_builder(tab.id);
+	lsystem_new::Plant* plant = lsystem_manager.get_plant(plant_builder, tab.id);
 	ImGui::Text("I am a plant");
+	ImGui::Text("Nodes: %d", static_cast<int>(plant->branches.size()));
 	return State::True;
 }
 
@@ -556,8 +573,7 @@ State update_builder_window_tab(lsystem_new::LsystemManager& lsystem_manager,
 			}
 
 			if (!open) {
-				State state = lsystem_manager.remove_plant(plant_builder, tab_id);
-				if (state == State::Error) { return state; }
+				lsystem_manager.remove_plant(plant_builder, tab_id);
 				plant_tabs.tabs.erase(plant_tabs.tabs.begin() + i);
 			} else {
 				i++;

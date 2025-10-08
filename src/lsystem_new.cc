@@ -11,8 +11,11 @@ std::optional<SymbolCategory> get_symbol_category(const char ch) {
 	if (ch == '^' || ch == '&') {
 		return SymbolCategory::Width;
 	}
+	if (ch == '[' || ch == ']') {
+		return SymbolCategory::Stack;
+	}
 
-	LOG_ERROR(app::context.logger, "invalid symobl: {}", ch);
+	LOG_ERROR(app::context.logger, "symobl has no category: {}", ch);
 	return std::nullopt;
 }
 
@@ -396,8 +399,10 @@ update_generator(Generator* generator) {
 		auto result = generate_timed(generator);
 		if (!result) { return std::unexpected(result.error()); }
 		if (result.value() == true) {
-			generator->generator_state.notify(generator->lstring);
+			generator->reset_plants();
 			generator->done_generating = true;
+			app::context.clear_bg = true;
+			LOG_INFO(app::context.logger, "generation finished");
 		}
 	}
 	return {};
@@ -424,10 +429,13 @@ symbol_action(Plant& plant, const char symbol, std::string& arg_block) {
 	Plant::Data& data = plant.data;
 	std::vector<Plant::Data>& data_stack = plant.data_stack;
 
-	auto args = parse_arg_block(arg_block);
-	if (!args) { return std::unexpected(args.error()); }
+	double x{};
+	if (!arg_block.empty()) {
+		auto args = parse_arg_block(arg_block);
+		if (!args) { return std::unexpected(args.error()); }
+		x = args.value().front();
+	}
 
-	double x = args.value().front();
 
 	auto symbol_category = get_symbol_category(symbol);
 	if (symbol_category == std::nullopt) { return std::unexpected(Error::Generic); }
@@ -475,10 +483,15 @@ symbol_action(Plant& plant, const char symbol, std::string& arg_block) {
 std::expected<bool, Error>
 build_timed(Plant& plant) {
 	int index = plant.current_index;
-	std::string& lstring = plant.lstring;
-	char symbol{};
 
-	// LOG_INFO(app::context.logger, "fuck you");
+	std::string_view lstring{};
+	if (!plant.generator) {
+		lstring = plant.lstring;
+	} else {
+		lstring = plant.generator->lstring;
+	}
+
+	char symbol{};
 
   while (index < lstring.size()) {
 
@@ -489,11 +502,9 @@ build_timed(Plant& plant) {
       return false;
     }
 
-		LOG_INFO(app::context.logger, "fuck you2");
-
 		symbol = lstring[index++];
 		if (index < lstring.size() && lstring[index] == '{') {
-			auto arg_block = get_arg_block(lstring, index);
+			auto arg_block = get_arg_block(lstring.data(), index);
 			if (!arg_block) { return std::unexpected(arg_block.error()); }
 
 			auto result = symbol_action(plant, symbol, arg_block.value());
@@ -501,6 +512,15 @@ build_timed(Plant& plant) {
 
 			index += arg_block.value().size();
 		} else {
+			if (symbol == ' ') {
+				continue;
+			}
+			if (symbol == '[' || symbol == ']') {
+				std::string empty_string{};
+				auto result = symbol_action(plant, symbol, empty_string);
+				if (!result) { return std::unexpected(result.error()); }
+				continue;
+			}
 			LOG_ERROR(app::context.logger, "lstring syntax invalid");
 			return std::unexpected(Error::Syntax);
 		}
@@ -514,9 +534,9 @@ build_timed(Plant& plant) {
 std::expected<bool, Error>
 draw_plant_timed(Plant& plant, draw::FrameBuf& fb) {
 
-	LOG_INFO(app::context.logger, "branches count {}", plant.branches.size());
-	LOG_INFO(app::context.logger, "branch: {}", plant.current_branch);
-	draw::wide_line(fb, Line2{{200.0, 000.0}, {400.0, 400.0}}, 0xFFFFFFFF, 5.0);
+	// LOG_INFO(app::context.logger, "branches count {}", plant.branches.size());
+	// LOG_INFO(app::context.logger, "branch: {}", plant.current_branch);
+	// draw::wide_line(fb, Line2{{200.0, 000.0}, {400.0, 400.0}}, 0xFFFFFFFF, 5.0);
 	for (int i = plant.current_branch; i < plant.branches.size(); i++) {
 
     // ---- check time ----
@@ -528,8 +548,8 @@ draw_plant_timed(Plant& plant, draw::FrameBuf& fb) {
     }
 
 		auto &branch = plant.branches[i];
-		LOG_INFO(app::context.logger, "branches {},{},{},{}", branch.start.x, branch.start.y,
-				branch.end.x, branch.end.y);
+		// LOG_INFO(app::context.logger, "branches {},{},{},{}", branch.start.x, branch.start.y,
+				// branch.end.x, branch.end.y);
 		draw::wide_line(fb, Line2{branch.start, branch.end}, branch.color, branch.width);
 	}
 	plant.current_branch = 0;
@@ -543,25 +563,28 @@ update_plant(Plant* plant, draw::FrameBuf& fb) {
 	if (plant->reset_needed == true) {
 		plant->reset_needed = false;
 		plant->reset();
-		plant->building = true;
-		LOG_INFO(app::context.logger, "reset finished");
+		LOG_INFO(app::context.logger, "plant reset finished");
 		return {};
 	}
 
-	if (plant->building) {
+	if (!plant->done_building) {
 		auto result = build_timed(*plant);
 		if (!result) { return std::unexpected(result.error()); }
 		if (result.value() == true) {
-			plant->building = false;
-			LOG_INFO(app::context.logger, "built!");
+			plant->done_building = true;
+			LOG_INFO(app::context.logger, "plant done building");
 		}
 	}
 
-	if (!plant->branches.empty()) {
+	// those two logic checks together are wack
+	if (!plant->branches.empty() && !plant->done_drawing) {
 		auto result_2 = draw_plant_timed(*plant, fb);
 		if (!result_2) { return std::unexpected(result_2.error()); }
 		if (result_2.value() == true) {
-			// LOG_INFO(app::context.logger, "drawn!");
+			if (plant->done_building) {
+				plant->done_drawing = true;
+				LOG_INFO(app::context.logger, "plant done drawing");
+			}
 		}
 	}
 	return {};

@@ -49,6 +49,8 @@ struct Context {
 	std::vector<Statequeue> state_queue_manager{};
 	std::vector<InputStatequeue> input_statequeue_manager{};
 	quill::Logger* logger{};
+	// CHANGE: remove this
+	bool clear_bg;
 };
 
 struct Video {

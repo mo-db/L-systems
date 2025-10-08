@@ -4,7 +4,6 @@
 #include "app.hpp"
 #include "graphics.hpp"
 #include "rasterize.hpp"
-#include "observer.hpp"
 
 namespace lsystem_new {
 constexpr int textfield_size = 4096;
@@ -28,6 +27,7 @@ enum class SymbolCategory : size_t {
   Rotate = 1,
   Width = 2,
   Color = 3,
+	Stack = 4,
 };
 
 std::optional<SymbolCategory> get_symbol_category(const char ch);
@@ -41,6 +41,8 @@ inline std::string to_string(SymbolCategory category) {
     return "Width";
   case SymbolCategory::Color:
     return "Color";
+  case SymbolCategory::Stack:
+    return "Stack";
   default:
     return "Unknown";
   }
@@ -140,6 +142,7 @@ inline std::string to_string(SymbolCategory category) {
 
 // ---- lstring generation ----
 
+struct Plant;
 
 struct Production {
 	char symbol{};
@@ -148,7 +151,17 @@ struct Production {
 };
 
 struct Generator {
-	observer::Subject generator_state{};
+	std::forward_list<Plant*> plants;
+	void add_plant(Plant* plant) {
+		plants.push_front(plant);
+	}
+	
+	void remove_plant(Plant* plant) {
+		plants.remove(plant);
+	}
+
+	void reset_plants();
+
   bool reset_needed{false};
   bool done_generating{true};
   int current_iteration{};
@@ -162,9 +175,9 @@ struct Generator {
   inline void remove_production() {
     if (productions.empty()) { return; }
     productions.pop_back();
-  }
+	}
 	inline void clear() {
-		iterations = 1;
+		// iterations = 1;
 		current_iteration = 0;
 		current_index = 0;
 		lstring.clear();
@@ -193,11 +206,13 @@ struct Branch {
 };
 
 struct Plant {
+	// could use generator id
+	Generator* generator = nullptr;
 
 	// starting data
 	Vec2 start_position{static_cast<double>(app::video.width)/2.0, 
 		static_cast<double>(app::video.height)/2.0};
-	double start_angle{2.0 * gk::pi};
+	double start_angle{gk::pi / 2.0};
 	double start_width{5.0};
 	uint32_t start_color{0xFF00FFFF};
 
@@ -219,9 +234,8 @@ struct Plant {
 
 
   bool reset_needed{false};
-	bool building = true;
-
-	observer::Observer ob{reset_needed, lstring};
+	bool done_building = false;
+	bool done_drawing = false;
 
 	void reset() {
 		current_index = 0;
@@ -232,16 +246,23 @@ struct Plant {
 		data_stack.clear();
 		branches.clear();
 		current_branch = 0;
-		building = false;
+		done_building = false;
+		done_drawing = false;
 	}
 };
+
+inline void Generator::reset_plants() {
+	for (auto& plant : plants) {
+		plant->reset_needed = true;
+	}
+}
 
 // plant manager
 struct PlantBuilder {
 	// environment conditions
   bool done_building{false};
 	// std::vector<Plant> plants{};
-	std::unordered_map<int, std::unique_ptr<Plant>> plants;
+	std::unordered_map<int, std::unique_ptr<Plant>> plants{};
 	
 	// temporary
 	// Plant plant{};
@@ -303,21 +324,22 @@ struct LsystemManager {
 
 	void add_plant(PlantBuilder* builder, const int id) {
 		builder->plants.emplace(id, std::make_unique<Plant>());
-		// default registration
+		Plant* plant = get_plant(builder, id);
+		if (!plant) { throw std::runtime_error("Plant does not exist"); }
+		// default generator registration
 		if (!generators.empty()) {
-			generators.begin()->second->generator_state.add_observer(
-					&(builder->plants[id]->ob));
+			plant->generator = generators.begin()->second.get();
+			generators.begin()->second->add_plant(plant);
 		}
 	}
-	State remove_plant(PlantBuilder* builder, int id) {
+	void remove_plant(PlantBuilder* builder, int id) {
 		Plant* plant = get_plant(builder, id);
-		if (!plant) {
-			print_info("no plant_builder found specified id");
-			return State::Error;
-		}
+		if (!plant) { throw std::runtime_error("Plant does not exist"); }
 		builder->plants.erase(id);
-		// if i dont use weak_ptr i have to unregister the observer now
-		return State::True;
+		// generator unregistration
+		if (plant->generator) {
+			plant->generator->remove_plant(plant);
+		}
 	}
 
 };
