@@ -86,9 +86,10 @@ void bary_triangle(FrameBuf fb, Vec2 vert1_in, Vec2 vert2_in, Vec2 vert3_in, uin
 // no need to world_to_screen for the lines?
 // render a line as a mesh with thickness -> maybe gradient, texture, etc
 // if wd (thickness) < 2, draw a thin line, gradient possible too
-void wide_line(FrameBuf fb, const Line2 &line, uint32_t color, double wd) {
+void wide_line(FrameBuf fb, const Line2 &line, double wd, 
+		uint32_t upper_color, uint32_t lower_color) {
 	if (wd < 2.0) {
-		thin_line(fb, line, color);
+		thin_line(fb, line, upper_color); // meh
 		return;
 	}
 	Vec2 line_vector = line.get_v();
@@ -114,8 +115,8 @@ void wide_line(FrameBuf fb, const Line2 &line, uint32_t color, double wd) {
 
 	// draw the triangles
 	for (int i = 0; i < seg_count * 2; i += 2) {
-		bary_triangle(fb, tri_verts[i+1], tri_verts[i], tri_verts[i+2], 0xFF00FFFF);
-		bary_triangle(fb, tri_verts[i+1], tri_verts[i+2], tri_verts[i+3], 0xFF0000FF);
+		bary_triangle(fb, tri_verts[i+1], tri_verts[i], tri_verts[i+2], upper_color);
+		bary_triangle(fb, tri_verts[i+1], tri_verts[i+2], tri_verts[i+3], lower_color);
 	}
 }
 

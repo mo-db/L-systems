@@ -11,6 +11,9 @@ std::optional<SymbolCategory> get_symbol_category(const char ch) {
 	if (ch == '^' || ch == '&') {
 		return SymbolCategory::Width;
 	}
+	if (ch == '$' || ch == '%') {
+		return SymbolCategory::Color;
+	}
 	if (ch == '[' || ch == ']') {
 		return SymbolCategory::Stack;
 	}
@@ -250,17 +253,16 @@ std::unordered_map<std::string, double> args_to_map(std::vector<double> args) {
 	return args_map;
 }
 
+// 
 std::expected<std::string, Error>
 maybe_apply_rule(Generator* generator, const char symbol, std::string arg_block) {
-	
-	std::unordered_map<std::string, double> local_variables{};
 	if (arg_block.empty()) {
-	} else {
-		std::expected<std::vector<double>, Error> args = parse_arg_block(arg_block);
-		if (!args) { return std::unexpected(args.error()); }
-
-		local_variables = args_to_map(args.value());
+		throw std::runtime_error("arg_block empty");
 	}
+	
+	std::expected<std::vector<double>, Error> args = parse_arg_block(arg_block);
+	if (!args) { return std::unexpected(args.error()); }
+	std::unordered_map<std::string, double> local_variables = args_to_map(args.value());
 
 
 	// ---- try to match a rule ----
@@ -270,8 +272,15 @@ maybe_apply_rule(Generator* generator, const char symbol, std::string arg_block)
 
 		if (rule.empty()) { continue; }
 
-		if (production.symbol != symbol) { continue; }
-				LOG_INFO(app::context.logger, "symbol match");
+		if (production.symbol != symbol) { 
+			// LOG_INFO(app::context.logger, "symbol dont match");
+			continue; 
+		}
+
+		if (production.n_vars > local_variables.size()) { 
+				LOG_INFO(app::context.logger, "symbol has less args");
+			continue; 
+		}
 
 
 		if (!condition.empty()) {
@@ -333,12 +342,14 @@ generate_timed(Generator* generator) {
 	return true;
 }
 
-
+// this whole thing is dirty af, refactor fucker, this sucks ass
 std::expected<bool, Error>
 _expand_lstring(Generator* generator) {
 	int index = generator->current_index;
 	std::string& lstring = generator->lstring;
 	char symbol{};
+
+	std::cout << "LS: " << lstring << std::endl;
 
   while (index < lstring.size()) {
 
@@ -362,16 +373,33 @@ _expand_lstring(Generator* generator) {
 
 				index += arg_block.value().size();
 			} else {
-				auto result = maybe_apply_rule(generator, symbol, std::string{});
-				if (!result) { return std::unexpected(result.error()); }
-				generator->lstring_buffer += result.value();
-				index++;
+				if (symbol == '[' or symbol == ']') {
+					generator->lstring_buffer += symbol;
+					index++;
+				} else {
+					std::string ee = to_string(Error::Syntax);
+					std::cout << "error here 1: " << ee << std::endl;
+					return std::unexpected(Error::Syntax);
+				}
+				// auto result = maybe_apply_rule(generator, symbol, std::string{});
+				// if (!result) { return std::unexpected(result.error()); }
+				// generator->lstring_buffer += result.value();
+				// index++;
 			}
 		} else {
-			auto result = maybe_apply_rule(generator, symbol, std::string{});
-			if (!result) { return std::unexpected(result.error()); }
-			generator->lstring_buffer += result.value();
-			break;
+			if (symbol == '[' or symbol == ']') {
+				generator->lstring_buffer += symbol;
+				break;
+			} else {
+				std::string ee = to_string(Error::Syntax);
+				std::cout << "error here 2: " << ee << std::endl;
+				return std::unexpected(Error::Syntax);
+			}
+
+			// auto result = maybe_apply_rule(generator, symbol, std::string{});
+			// if (!result) { return std::unexpected(result.error()); }
+			// generator->lstring_buffer += result.value();
+			// break;
 		}
 	}
 
@@ -397,7 +425,11 @@ update_generator(Generator* generator) {
 
 	if (!generator->done_generating) {
 		auto result = generate_timed(generator);
-		if (!result) { return std::unexpected(result.error()); }
+		if (!result) { 
+			std::string ee = to_string(result.error());
+			std::cout << "error here: " << ee << std::endl;
+			return std::unexpected(result.error()); 
+		}
 		if (result.value() == true) {
 			generator->reset_plants();
 			generator->done_generating = true;
@@ -413,7 +445,9 @@ void _grow(Plant& plant, const float length) {
 	Vec2 old_position = data.position;
 	data.position.x += length * cos(data.angle);
 	data.position.y += length * -sin(data.angle);
-	plant.branches.push_back({old_position, data.position, data.width});
+	plant.branches.push_back({old_position, data.position, data.width,
+			color::palette[data.palette_pos_upper],
+			color::palette[data.palette_pos_lower]});
 }
 void _jump(Plant& plant, const float length) {
 	Plant::Data& data = plant.data;
@@ -423,6 +457,7 @@ void _jump(Plant& plant, const float length) {
 
 void _turn(Plant::Data& data, const float angle) { data.angle += angle; }
 void _change_width(Plant::Data& data, const float width) { data.width += width; }
+// void _(Plant::Data& data, const float angle) { data.angle += angle; }
 
 std::expected<void, Error>
 symbol_action(Plant& plant, const char symbol, std::string& arg_block) {
@@ -465,6 +500,14 @@ symbol_action(Plant& plant, const char symbol, std::string& arg_block) {
 	}
 	if (symbol == '&') {
 		_change_width(data, x);
+	}
+
+	// color palette
+	if (symbol == '$') {
+		data.palette_pos_lower = ++data.palette_pos_lower % color::palette.size();
+	}
+	if (symbol == '%') {
+		data.palette_pos_upper = ++data.palette_pos_upper% color::palette.size();
 	}
 
 	// push and pop turtle state
@@ -550,7 +593,8 @@ draw_plant_timed(Plant& plant, draw::FrameBuf& fb) {
 		auto &branch = plant.branches[i];
 		// LOG_INFO(app::context.logger, "branches {},{},{},{}", branch.start.x, branch.start.y,
 				// branch.end.x, branch.end.y);
-		draw::wide_line(fb, Line2{branch.start, branch.end}, branch.color, branch.width);
+		draw::wide_line(fb, Line2{branch.start, branch.end}, branch.width,
+				branch.color_upper, branch.color_lower);
 	}
 	plant.current_branch = 0;
 	return true;

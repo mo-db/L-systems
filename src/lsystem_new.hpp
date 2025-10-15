@@ -17,10 +17,15 @@ enum class SymbolIdentifier : size_t {
   RotateRight = 5,
   IncWidth = 6,
   DecWidth = 7,
-  Count = 8
+	IncPalUpper = 8,
+	IncPalLower = 9,
+  Count = 10,
 };
 constexpr std::array<char, static_cast<std::size_t>(SymbolIdentifier::Count)>
-    symbols{'A', 'a', 'B', 'b', '-', '+', '^', '&'};
+    symbols{ 'A', 'a', 'B', 'b', '-', '+', '^', '&', '$', '%' };
+
+// constexpr std::array<char[4], static_cast<std::size_t>(SymbolIdentifier::Count)>
+//     symbols{"A", "a", "B", "b", "-", "+", "^", "&"};
 
 enum class SymbolCategory : size_t {
   Move = 0,
@@ -48,104 +53,13 @@ inline std::string to_string(SymbolCategory category) {
   }
 }
 
-// // ---- Plant ----
-// struct Branch {
-// 	int node1_id{};
-// 	int node2_id{};
-// 	double width{};
-// 	// uint32_t color{};
-// };
-//
-// struct Turtle {
-// 	Vec2 position{};
-// 	double angle{};
-// 	double width{};
-// 	Turtle() = default;
-// 	Turtle(int node_id_, const float angle_) : node_id{node_id_}, angle{angle_} {}
-// 	inline Vec2 move(const double length) {
-// 		position.x += length * cos(angle);
-// 		position.y += length * -sin(angle);
-// 		return position;
-// 	}
-// 	void _turn(Turtle &turtle, const float angle) { turtle.angle += angle; }
-// 	void reset(int node_id_, float angle_) {
-// 		node_id = node_id_;
-// 		angle = angle_;
-// 		width = 1.0f;
-// 	}
-// };
-//
-// // builder has conditions that change how he draws a lstring
-// struct Turtle2 {
-// 	int id_current_node{};
-// 	double angle{};
-// 	double width{};
-// 	uint32_t color{};
-// 	Plant* plant;
-// 	bool grow_branch(std::vector<Vec2>& nodes, std::vector<Branch>& branches,
-// 			const double length) {
-// 		if (!plant) { return false; }
-// 		Vec2 position = nodes[id_current_node];
-// 		position.x += length * cos(angle);
-// 		position.y += length * -sin(angle);
-// 		nodes.push_back(position);
-// 		int id_new_node = static_cast<int>(nodes.size()) - 1;
-// 		branches.push_back(Branch{id_current_node, id_new_node, width});
-// 	}
-// 	inline void _turn(Turtle &turtle, const float angle) { turtle.angle += angle; }
-// 	void change_width();
-// 	void change_hue();
-// };
-//
-// struct Plant {
-//   Vec2 base_node{static_cast<double>(app::video.width) / 2.0,
-//                  static_cast<double>(app::video.height) / 2.0};
-//   double base_angle{2 * gk::pi};
-//   double base_width{3.0};
-//   uint32_t base_color{0xFF00FFFF};
-//
-//   std::vector<Vec2> nodes;
-//   std::vector<Branch> branches;
-// 	Plant() = default;
-// 	Plant(Vec2 base_node_, float base_angle_) :
-// 		base_node{base_node_}, base_angle{base_angle_} {
-// 			nodes.push_back(base_node);
-// 	}
-//
-// 	Turtle turtle{0, start_angle};
-// 	std::vector<Turtle> turtle_stack;
-//
-// 	inline int grow(const double length) {
-// 		Vec2 new_node_position = turtle.move(length);
-// 		nodes.push_back(new_node_position);
-// 		int new_node_id = static_cast<int>(nodes.size()) - 1;
-// 		branches.push_back(Branch{turtle.node_id, new_node_id, turtle.width});
-// 		turtle.node_id = new_node_id;
-// 		return new_node_id;
-// 	}
-//
-// 	bool needs_regen = true;
-// 	bool regenerating = false;
-// 	int current_lstring_index = 0;
-// 	bool needs_redraw = true;
-// 	bool redrawing = false;
-// 	int current_branch = 0;
-//
-// 	void clear() {
-// 		nodes.clear();
-// 		nodes.push_back(start_node);
-// 		branches.clear();
-// 		turtle_stack.clear();
-// 		turtle.reset(0, start_angle);
-// 	}
-// };
-
 // ---- lstring generation ----
 
 struct Plant;
 
 struct Production {
 	char symbol{};
+	int n_vars{1}; // range 1 - 3
 	char condition[textfield_size]{};
 	char rule[textfield_size]{};
 };
@@ -184,10 +98,11 @@ struct Generator {
 		lstring_buffer.clear();
 	}
 
-  std::unordered_map<SymbolCategory, double> symbol_defaults{
+  std::unordered_map<SymbolCategory, double> symbol_defaults {
       {SymbolCategory::Move, 50.0},
       {SymbolCategory::Rotate, gk::pi / 2.0}, // TODO: make this pi * value
-      {SymbolCategory::Width, 50.0}};
+      {SymbolCategory::Width, 50.0},
+      {SymbolCategory::Color, 1.0}};
   std::unordered_map<std::string, double> global_variables{
       {"h", 0.0}, {"i", 0.0}, {"j", 0.0}, {"k", 0.0}};
 
@@ -202,7 +117,9 @@ struct Branch {
 	Vec2 start{};
 	Vec2 end{};
 	double width{};
-	uint32_t color{0xFF00FFFF};
+	uint32_t color_upper{0xFF00FFFF};
+	uint32_t color_lower{0xFF00FFFF};
+	uint32_t color{0xFF00FFFF}; // remove
 };
 
 struct Plant {
@@ -224,6 +141,8 @@ struct Plant {
 		Vec2 position{};
 		double angle{};
 		double width{};
+		int palette_pos_upper{};
+		int palette_pos_lower{};
 		uint32_t color{0xFF00FFFF};
 	} data;
 	std::vector<Data> data_stack{};
@@ -242,6 +161,8 @@ struct Plant {
 		data.position = start_position;
 		data.angle = start_angle;
 		data.width = start_width;
+		data.palette_pos_upper = 0;
+		data.palette_pos_lower = 0;
 		data.color = start_color;
 		data_stack.clear();
 		branches.clear();

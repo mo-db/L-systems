@@ -14,8 +14,8 @@ struct FrameBuf {
 void set_pixel(FrameBuf fb, int x, int y, uint32_t color);
 void clear(FrameBuf fb, uint32_t color);
 void bary_triangle(FrameBuf fb, Vec2 vert1, Vec2 vert2, Vec2 vert3, uint32_t color);
-void wide_line(FrameBuf fb, const Line2 &line, uint32_t color, double wd);
-// void thick_line(const Line2 &line, uint32_t color, double wd);
+void wide_line(FrameBuf fb, const Line2 &line, double wd, 
+		uint32_t upper_color, uint32_t lower_color);
 void thin_line(FrameBuf fb, const Line2 &line, uint32_t color);
 void plot_circle(FrameBuf fb, const Circle2 &circle, uint32_t color);
 

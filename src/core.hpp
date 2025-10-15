@@ -74,8 +74,8 @@ inline const char* to_string(Error error) noexcept {
     case Error::InvalidArgument: return "InvalidArgument";
     case Error::OutOfRange: return "OutOfRange";
     case Error::NotFound: return "NotFound";
-    case Error::Syntax: return "Semantic";
-    case Error::Semantic: return "Syntax";
+    case Error::Syntax: return "Syntax";
+    case Error::Semantic: return "Semantic";
     }
     return "Unknown";
 }
@@ -94,6 +94,18 @@ constexpr double pi = std::numbers::pi;
 } // namespace gk
 
 namespace color {
+
+inline std::vector<uint32_t> palette = {
+0xFFFFFAE5,
+0xFFFFEFB1,
+0xFFF9E282,
+0xFFE7D070,
+0xFFD5BF5E,
+0xFFC5AE46,
+0xFFA89000,
+0xFF786600,
+0xFF493D00,
+0xFF231C00 };
 
 // colors are ABGR -> little endian with SDL_PIXELFORMAT_RGBA32
 constexpr uint32_t black =					0xFF000000;
@@ -117,6 +129,9 @@ constexpr uint32_t special = 				blue;
 constexpr uint32_t hl_primary =			green;
 constexpr uint32_t hl_secondary =		cyan;
 constexpr uint32_t hl_tertiary =		magenta;
+
+
+// inline std::vector<uint32_t> palette = { yellow, magenta, cyan };
 } // namespace color
 
 namespace util {

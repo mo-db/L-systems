@@ -1,5 +1,5 @@
 project('lsys', 'c', 'cpp', 
-  default_options : ['c_std=c11', 'cpp_std=c++23', 'buildtype=plain'])
+  default_options : ['c_std=c11', 'cpp_std=c++23', 'buildtype=debug'])
 
 # dependency method order: pkgconf -> cmake -> wrap
 sdl3_dep = dependency('sdl3')

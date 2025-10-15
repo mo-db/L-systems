@@ -288,6 +288,7 @@ State update_generator_window_tab(
 	}
 	ImGui::SameLine();
 	if (ImGui::Button("Clear L-String")) {
+		generator->iterations = 1;
 		generator->clear();
 		generator->reset_needed = true;
 	}
@@ -343,6 +344,29 @@ State update_generator_window_tab(
 						ImGui::SetItemDefaultFocus();
 				}
 				ImGui::EndCombo();
+			}
+
+			ImGui::SameLine();
+			// ---- n_vars selection ----
+			{
+				std::string symbol_str = fmt::format("{}", production.n_vars);
+				const char *combo_preview_value = symbol_str.c_str();
+				if (ImGui::BeginCombo("vars", combo_preview_value, flags)) {
+					for (int n = 1; n < 4; n++) {
+						char symbol = lsystem_new::symbols[n];
+						const bool is_selected = (symbol == production.symbol);
+
+						symbol_str = fmt::format("{}", n);
+						if (ImGui::Selectable(symbol_str.c_str(), is_selected))
+							production.n_vars = n;
+
+						// Set the initial focus when opening the combo (scrolling +
+						// keyboard navigation focus)
+						if (is_selected)
+							ImGui::SetItemDefaultFocus();
+					}
+					ImGui::EndCombo();
+				}
 			}
 
 			// ---- condition ---- 
